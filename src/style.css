@@ -930,3 +930,31 @@ button.stance.aggressive {
     flex-wrap: wrap;
   }
 }
+
+/* Auswertung nach der Schlacht */
+table.kills {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+
+table.kills th,
+table.kills td {
+  padding: 3px 6px;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+table.kills th:first-child,
+table.kills td:first-child {
+  text-align: left;
+}
+
+table.kills td:nth-child(2) {
+  color: var(--player);
+}
+
+table.kills td:nth-child(3) {
+  color: var(--enemy);
+}

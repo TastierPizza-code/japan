@@ -1,6 +1,6 @@
 import "./style.css";
 import { BattleAI } from "./sim/ai.ts";
-import { Battle } from "./sim/battle.ts";
+import { Battle, KILL_CAUSES } from "./sim/battle.ts";
 import { ENEMY, PLAYER, TICK } from "./sim/config.ts";
 import { BIOME_NAMES, BIOMES, type Biome } from "./sim/terrain.ts";
 import { CampaignView } from "./campaign/campaignView.ts";
@@ -333,6 +333,7 @@ class App {
       <h1>${r.winner === PLAYER ? "Sieg!" : "Niederlage"}</h1>
       <h2>${r.reason} · Dauer ${Math.floor(b.time / 60)} Minuten</h2>
       <ul><li>Eigene Verluste: <b>${lost(PLAYER)}</b></li><li>Feindliche Verluste: <b>${lost(ENEMY)}</b></li></ul>
+      ${killTable(b)}
       <button id="again" class="wide primary">Zurück zum Menü</button></div>`;
     $("#again").addEventListener("click", () => {
       this.battleView.close();
@@ -341,6 +342,17 @@ class App {
       this.menu();
     });
   }
+}
+
+/** Auswertung: wer hat womit wie viele Gegner ausgeschaltet */
+function killTable(b: Battle): string {
+  const rows = KILL_CAUSES.map((name, k) => ({ name, mine: b.kills[PLAYER][k], theirs: b.kills[ENEMY][k] }))
+    .filter((r) => r.mine + r.theirs > 0)
+    .sort((p, q) => q.mine + q.theirs - (p.mine + p.theirs));
+  const own = b.friendly[PLAYER] + b.friendly[ENEMY] > 0 ? `<tr><td>Eigenbeschuss</td><td>${b.friendly[PLAYER]}</td><td>${b.friendly[ENEMY]}</td></tr>` : "";
+  return `<table class="kills"><tr><th>Ausgeschaltet durch</th><th>Du</th><th>Feind</th></tr>${rows
+    .map((r) => `<tr><td>${r.name}</td><td>${r.mine}</td><td>${r.theirs}</td></tr>`)
+    .join("")}${own}</table>`;
 }
 
 async function boot() {

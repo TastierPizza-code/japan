@@ -143,6 +143,8 @@ export interface Smoke {
   until: number;
   /** Gaswolke statt Nebel: blockiert keine Sicht, setzt aber zu */
   gas?: boolean;
+  /** Wer das Gas geschossen hat */
+  side?: number;
 }
 
 interface PendingShot {
@@ -206,6 +208,10 @@ export interface BattleEvents {
   signals: number[];
 }
 
+/** Waffenarten für die Auswertung nach der Schlacht */
+export const KILL_CAUSES = ["Gewehre", "MGs", "Artillerie", "Handgranaten", "Nahkampf", "Magie", "Gas", "Feuer", "Panzer", "Minen", "Tankgewehre"];
+const C_RIFLE = 0, C_MG = 1, C_ARTY = 2, C_GRENADE = 3, C_MELEE = 4, C_MAGIC = 5, C_GAS = 6, C_FIRE = 7, C_TANK = 8, C_MINE = 9, C_AT = 10;
+
 export interface BattleResult {
   winner: number;
   reason: string;
@@ -266,6 +272,12 @@ export class Battle {
     wrecks: [],
     signals: [],
   };
+  /** Ausgeschaltete Gegner je Seite und Waffenart (KILL_CAUSES) */
+  kills: number[][] = [KILL_CAUSES.map(() => 0), KILL_CAUSES.map(() => 0)];
+  /** Verluste durch eigenes Feuer (Gas, Artillerie, Handgranaten) je Seite */
+  friendly = [0, 0];
+  private dmgSide = -1;
+  private dmgCause = 0;
   /** Gefallene (x, y, Seite, Typ, Winkel) – damit das Bild beim Öffnen wieder aufgebaut werden kann */
   corpses: number[] = [];
   /** Panzerspuren und Wracks für den Wiederaufbau des Bildes */
@@ -671,6 +683,7 @@ export class Battle {
       if (!isMage && !isTank && !targetIsMage && !targetArmored && tDist <= MELEE_RANGE && type !== UNIT_FLAME) {
         let p = MELEE_KILL + (c.order === "storm" ? 0.15 : 0);
         if (this.companies[this.comp[t]].order === "rout") p += 0.3;
+        this.by(this.side[i], C_MELEE);
         if (rng.next() < p) this.damage(t, 1, this.ang[i]);
         this.ang[i] = Math.atan2(this.y[t] - this.y[i], this.x[t] - this.x[i]);
         this.reload[i] = 1.2 + rng.next();
@@ -706,6 +719,7 @@ export class Battle {
         const hit = rng.next() < p;
         this.events.shots.push(this.x[i], this.y[i], this.x[t], this.y[t], UNIT_AT, this.side[i]);
         if (hit) {
+          this.by(this.side[i], C_AT);
           this.damage(t, AT_DAMAGE, this.ang[i]);
           this.events.hits.push(this.x[t], this.y[t], 1);
         }
@@ -719,6 +733,7 @@ export class Battle {
   /** Gewehr-/MG-Schuss mit Deckung, Niederhalten und Panzerung */
   private rifleShot(i: number, t: number, dist: number, baseHit: number) {
     const rng = this.rng;
+    this.by(this.side[i], this.type[i] === UNIT_MG ? C_MG : this.type[i] === UNIT_TANK ? C_TANK : C_RIFLE);
     const st = STATS[this.type[i]];
     const tType = this.type[t];
     const sight = this.alongTrench(i, t) ? 0.05 : this.sight(i, t);
@@ -807,6 +822,7 @@ export class Battle {
 
   private castSpell(i: number, t: number, dist: number) {
     const rng = this.rng;
+    this.by(this.side[i], C_MAGIC);
     const st = STATS[UNIT_MAGE];
     const acc = st.hit * (1 - 0.4 * (dist / st.range));
     let ex = this.x[t];
@@ -842,6 +858,7 @@ export class Battle {
 
   /** Flammenwerfer: Kegel vor dem Schützen, Deckung hilft kaum */
   private flame(i: number) {
+    this.by(this.side[i], C_FIRE);
     const a = this.ang[i];
     const range = STATS[UNIT_FLAME].range;
     this.events.flames.push(this.x[i], this.y[i], a);
@@ -865,6 +882,7 @@ export class Battle {
 
   /** Panzerkanone: kleine Sprenggranate auf MGs, Geschütze oder Menschenansammlungen */
   private tankCannon(i: number) {
+    this.by(this.side[i], C_TANK);
     if (this.reload2[i] > 0) return;
     const enemy = 1 - this.side[i];
     let target = -1;
@@ -1000,6 +1018,7 @@ export class Battle {
     this.gasTimer = 0;
     for (const sm of this.smokes) {
       if (!sm.gas) continue;
+      this.by(sm.side ?? -1, C_GAS);
       const age = this.time - sm.t0;
       const strength = Math.min(1, age / 4) * Math.min(1, (sm.until - this.time) / 15);
       for (let s = 0; s < 2; s++) {
@@ -1034,6 +1053,7 @@ export class Battle {
   }
 
   private grenadeImpact(s: Shell) {
+    this.by(s.side, C_GRENADE);
     const enemy = 1 - s.side;
     this.grids[enemy].forEachInRadius(s.tx, s.ty, GRENADE_RADIUS * 2, this.x, this.y, (id, d) => {
       if (!this.alive[id] || STATS[this.type[id]].armored) return;
@@ -1047,6 +1067,12 @@ export class Battle {
     this.events.blasts.push(s.tx, s.ty, GRENADE_RADIUS, 6);
   }
 
+  /** Wer gerade trifft und womit (für die Auswertung) */
+  private by(side: number, cause: number) {
+    this.dmgSide = side;
+    this.dmgCause = cause;
+  }
+
   private damage(id: number, amount: number, angle: number) {
     if (!this.alive[id]) return;
     this.hp[id] -= amount;
@@ -1056,6 +1082,9 @@ export class Battle {
     const c = this.companies[this.comp[id]];
     c.alive--;
     c.lastLoss = this.time;
+    const victim = this.side[id];
+    if (this.dmgSide === victim) this.friendly[victim]++;
+    else this.kills[this.dmgSide < 0 ? 1 - victim : this.dmgSide][this.dmgCause]++;
     const type = this.type[id];
     if (type === UNIT_RIFLE || type === UNIT_AT || type === UNIT_FLAME || type === UNIT_STORM) c.morale -= MORALE_PER_LOSS / c.initial;
     else if (type === UNIT_MG) c.morale -= 12;
@@ -1170,12 +1199,13 @@ export class Battle {
         flying.push(s);
         continue;
       }
+      this.by(s.side, s.kind === "cannon" ? C_TANK : C_ARTY);
       if (s.kind === "he") this.shellImpact(s.tx, s.ty, ARTY_KILL_RADIUS, true);
       else if (s.kind === "smoke") {
         this.smokes.push({ x: s.tx, y: s.ty, r: SMOKE_RADIUS, t0: this.time, until: this.time + SMOKE_DURATION });
         this.events.blasts.push(s.tx, s.ty, 8, 7);
       } else if (s.kind === "gas") {
-        this.smokes.push({ x: s.tx, y: s.ty, r: GAS_RADIUS, t0: this.time, until: this.time + GAS_DURATION, gas: true });
+        this.smokes.push({ x: s.tx, y: s.ty, r: GAS_RADIUS, t0: this.time, until: this.time + GAS_DURATION, gas: true, side: s.side });
         // Gasalarm: höchstens einmal je Salve (nicht für jede Granate)
         if (!this.smokes.some((o) => o.gas && o !== this.smokes[this.smokes.length - 1] && this.time - o.t0 < 6 && Math.hypot(o.x - s.tx, o.y - s.ty) < 200)) this.signal(s.tx, s.ty, 1);
         this.events.blasts.push(s.tx, s.ty, 8, 8);
@@ -1234,6 +1264,7 @@ export class Battle {
     this.mineTimer = 0.2;
     for (const m of this.terrain.mines) {
       if (!m.alive) continue;
+      this.by(m.side, C_MINE);
       const enemy = 1 - m.side;
       const who = this.grids[enemy].nearest(m.x, m.y, MINE_TRIGGER + 6, this.x, this.y);
       if (who < 0) continue;
@@ -1258,6 +1289,7 @@ export class Battle {
   private updateFires(dt: number) {
     if (this.fires.length === 0) return;
     this.fires = this.fires.filter((f) => f.until > this.time);
+    this.by(-1, C_FIRE);
     for (const f of this.fires) {
       for (let s = 0; s < 2; s++) {
         this.grids[s].forEachInRadius(f.x, f.y, f.r, this.x, this.y, (id) => {
