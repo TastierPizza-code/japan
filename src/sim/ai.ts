@@ -1,5 +1,5 @@
 import type { Battle, Company } from "./battle.ts";
-import { FORWARD, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_STORM, UNIT_TANK, WIRE_OFFSET, WORLD_W } from "./config.ts";
+import { FORWARD, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_STORM, UNIT_TANK, WIRE_OFFSET, WORLD_W } from "./config.ts";
 
 const LANES = [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6];
 const LANE_NAMES = ["links", "Mitte", "rechts"];
@@ -14,13 +14,15 @@ interface Attack {
   lane: number;
   /** Einbruchstelle: wo der Draht am meisten zerstört ist */
   breach: number;
-  stage: "prep" | "approach" | "smoke" | "storm";
+  stage: "prep" | "approach" | "tanks" | "smoke" | "storm";
   timer: number;
   units: number[];
   /** vom Spieler befohlen */
   planned: boolean;
   /** Begleit-MGs sind in den Einbruch nachgezogen */
   mgsForward?: boolean;
+  /** Infanterie ist in die Ausgangsstellung unterwegs */
+  infantryGo?: boolean;
   /** Gas auf den Unterstützungsgraben ist geschossen */
   gassed?: boolean;
   /** Kompanie der zweiten Welle und ob sie schon stürmt */
@@ -303,19 +305,10 @@ export class BattleAI {
         b.callArtillery(this.side, a.lane, this.veteran ? b.terrain.wireY(enemySide, a.lane) : enemyFront(a.lane), "he");
         this.artyWait = 30;
       }
-      // 2. Vorarbeiten in Deckung (von Trichter zu Trichter), Panzer vorneweg
-      // Stoßtrupps und Flammenwerfer in die Mitte (sie führen den Einbruch), Schützen daneben
-      const lead = foot.filter((c) => c.type === UNIT_STORM || c.type === UNIT_FLAME);
-      const line = foot.filter((c) => c.type === UNIT_RIFLE);
-      lead.forEach((c, k) => {
-        const x = spread(k, lead.length, 50, a.lane);
-        b.orderMove(c.id, x, jumpY(x) - fwd * 30);
-      });
-      line.forEach((c, k) => {
-        const x = spread(k, line.length, 150, a.lane);
-        b.orderMove(c.id, x, jumpY(x));
-      });
-      tanks.forEach((c, k) => b.orderMove(c.id, spread(k, tanks.length, 120, a.lane), jumpY(a.lane) + fwd * 70));
+      // 2. Panzer hinter der Ausgangsstellung bereitstellen, außerhalb der Reichweite der Tankgewehre.
+      //    Erfahrene lassen die Infanterie erst losgehen, wenn sie gleichzeitig mit den Panzern ankommt.
+      tanks.forEach((c, k) => b.orderMove(c.id, spread(k, tanks.length, 120, a.lane), jumpY(a.lane) - fwd * 40));
+      if (!this.veteran || tanks.length === 0) this.moveInfantry(b, a, foot, jumpY);
       // Begleit-MGs an die Flanken der Ausgangsstellung: halten die Nachbarabschnitte nieder
       mgs.forEach((c, k) => {
         const x = a.lane + (k % 2 === 0 ? -1 : 1) * 240;
@@ -333,12 +326,34 @@ export class BattleAI {
           b.callArtillery(this.side, a.lane - 60, b.terrain.supportY(enemySide, a.lane), "gas");
         } else b.callArtillery(this.side, a.lane, enemyFront(a.lane), "he");
       }
+      if (!a.infantryGo) {
+        // Warten im eigenen Graben, bis die langsamen Panzer weit genug vorn sind
+        const eta = (list: Company[], speed: number, ty: (c: Company) => number) =>
+          Math.max(0, ...list.map((c) => Math.hypot(c.cx - c.tx, c.cy - ty(c)) / speed));
+        const tankEta = eta(tanks, STATS[UNIT_TANK].walk * 0.85, (c) => c.ty);
+        const infEta = eta(foot, STATS[UNIT_RIFLE].walk, (c) => jumpY(c.cx));
+        if (tankEta <= infEta + 10 || a.timer > 200) {
+          this.moveInfantry(b, a, foot, jumpY);
+          a.timer = 0;
+        }
+        return;
+      }
       // Wer in der Ausgangsstellung wartet, liegt unter Feuer: nicht auf die letzten Nachzügler warten
       const rifles = foot.filter((c) => c.type === UNIT_RIFLE);
       const there = rifles.filter((c) => Math.abs(c.cy - jumpY(c.cx)) < 80).length;
-      const ready = there >= rifles.length * 0.75;
-      if (ready || a.timer > (this.veteran ? 150 : 120)) {
+      // Erfahrene warten auch auf die Panzer
+      const tanksThere = !this.veteran || tanks.every((c) => Math.abs(c.cy - (jumpY(c.cx) - fwd * 40)) < 80);
+      const ready = there >= rifles.length * 0.75 && tanksThere;
+      if (ready || a.timer > (this.veteran ? 200 : 120)) {
         a.breach = this.veteran ? this.findBreach(b, enemySide, a.lane) : a.lane;
+        tanks.forEach((c, k) => b.orderMove(c.id, spread(k, tanks.length, 60, a.breach), enemyFront(a.breach) + fwd * 40));
+        if (this.veteran && tanks.length > 0) {
+          // Panzer rollen voraus; Nebel und Sturm erst, wenn sie nah am Graben sind
+          if (arty()) b.callArtillery(this.side, a.breach, enemyFront(a.breach), "he");
+          a.stage = "tanks";
+          a.timer = 0;
+          return;
+        }
         // 3. Nebel auf den feindlichen Graben, dann Sprengfeuer
         if (this.veteran) {
           // Nebel direkt auf den feindlichen Graben: Die Verteidiger sehen erst auf wenige Meter
@@ -346,14 +361,22 @@ export class BattleAI {
           for (const dx of [-110, 0, 110]) if (arty()) b.callArtillery(this.side, a.breach + dx - 20, wall, "smoke");
         }
         if (arty()) b.callArtillery(this.side, a.breach, enemyFront(a.breach), "he");
-        tanks.forEach((c) => b.orderMove(c.id, a.breach, enemyFront(a.breach) + fwd * 40));
+        a.stage = "smoke";
+        a.timer = 0;
+      }
+    } else if (a.stage === "tanks") {
+      // Die Infanterie läuft fast dreimal so schnell: erst los, wenn die Panzer vorn sind
+      const lead = Math.min(...tanks.map((c) => Math.abs(c.cy - enemyFront(c.cx))));
+      if (tanks.length === 0 || lead < 260 || a.timer > 60) {
+        const wall = enemyFront(a.breach) - fwd * 20;
+        for (const dx of [-110, 0, 110]) if (arty()) b.callArtillery(this.side, a.breach + dx - 20, wall, "smoke");
         a.stage = "smoke";
         a.timer = 0;
       }
     } else if (a.stage === "smoke") {
       // 4. Sobald der Nebel steht: Stoßtrupps zuerst, dann die Infanterie – durch die Drahtlücke
       // Erfahrene warten, bis der Nebel wirklich über dem Einbruchsabschnitt liegt
-      const smokeUp = b.smokes.filter((sm) => Math.abs(sm.x - a.breach) < 200).length >= 6;
+      const smokeUp = b.smokes.filter((sm) => !sm.gas && Math.abs(sm.x - a.breach) < 200).length >= 6;
       if (this.veteran ? smokeUp || a.timer >= 24 : a.timer >= 6) {
         const storm = foot.filter((c) => c.type === UNIT_STORM || c.type === UNIT_FLAME);
         const rest = foot.filter((c) => c.type === UNIT_RIFLE);
@@ -465,6 +488,23 @@ export class BattleAI {
     this.onLog?.(`Zweite Welle rückt nach: ${wave.name}`);
   }
 
+  /** Vorarbeiten in die Ausgangsstellung: Stoßtrupps und Flammenwerfer in die Mitte, Schützen daneben */
+  private moveInfantry(b: Battle, a: Attack, foot: Company[], jumpY: (x: number) => number) {
+    const fwd = FORWARD[this.side];
+    const spread = (k: number, n: number, w: number, around: number) => around + (k - (n - 1) / 2) * w;
+    const lead = foot.filter((c) => c.type === UNIT_STORM || c.type === UNIT_FLAME);
+    const line = foot.filter((c) => c.type === UNIT_RIFLE);
+    lead.forEach((c, k) => {
+      const x = spread(k, lead.length, 50, a.lane);
+      b.orderMove(c.id, x, jumpY(x) - fwd * 30);
+    });
+    line.forEach((c, k) => {
+      const x = spread(k, line.length, 150, a.lane);
+      b.orderMove(c.id, x, jumpY(x));
+    });
+    a.infantryGo = true;
+  }
+
   /** Liegen keine eigenen Leute im Umkreis? (kein Beschuss der eigenen Truppe) */
   private clearOfOwn(b: Battle, x: number, y: number, r: number) {
     return !b.companies.some((c) => c.side === this.side && c.alive > 0 && c.type !== UNIT_MAGE && Math.hypot(c.cx - x, c.cy - y) < r);
@@ -514,7 +554,7 @@ export class BattleAI {
     const a = this.attack;
     if (!a) return null;
     const where = LANE_NAMES[laneOf(a.lane)];
-    const what = { prep: "Draht", approach: "Bereitstellung", smoke: "Nebel", storm: "Sturm" }[a.stage];
+    const what = { prep: "Draht", approach: "Bereitstellung", tanks: "Panzer rollen", smoke: "Nebel", storm: "Sturm" }[a.stage];
     return `⚔ ${where}: ${what}`;
   }
 
