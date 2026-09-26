@@ -122,10 +122,10 @@ Gleich starke Seiten bluten beide aus. Wer klüger führt, soll aber klar im Vor
 | Einbruch sichern | Wer im Graben steht, richtet ihn ein, ein MG wird nachgezogen | sofortiger Gegenstoß |
 | Magier über eigener Stellung | eigene Gewehre und MGs helfen im Luftkampf | nicht über feindliche Linien fliegen |
 
-Messung (je 4 Karten, beide Seitenrollen, `scripts/headless.ts`, Szenario-Skripte):
-- Angriff gegen einen haltenden Graben: erfahren 0,86 Tote je getötetem Verteidiger,
+Messung ohne Grafik (Testskripte wie `scripts/headless.ts`):
+- Angriff gegen einen haltenden Graben (3 Karten): erfahren 0,86 Tote je getötetem Verteidiger,
   unerfahren 1,11.
-- Großschlacht erfahren gegen unerfahren: 7 von 8 gewonnen. Den Magierkampf gewinnt die
+- Großschlacht erfahren gegen unerfahren (4 Karten, jede Seite einmal erfahren): 7 von 8 gewonnen. Den Magierkampf gewinnt die
   erfahrene Seite 8 von 8 Mal, weil sie ihn über der eigenen Stellung annimmt.
 
 ## Wirtschaft (einfach)
