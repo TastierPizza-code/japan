@@ -110,23 +110,35 @@ Die Schlachten sollen später richtig gut aussehen und sich glaubwürdig anfühl
 
 ### Taktische Vorteile (v0.4)
 
-Gleich starke Seiten bluten beide aus. Wer klüger führt, soll aber klar im Vorteil sein.
+Gleich starke Seiten bluten beide aus. Wer klüger führt, soll aber klar im Vorteil sein. Alles
+wirkt nur über Beschuss, Treffer, Sicht und Moral. Es gibt keine Boni, keine sicheren Treffer und
+keine sicheren Tötungen.
 
 | Mittel | Wirkung | Gegenmittel |
 | --- | --- | --- |
 | Nebel (Artillerie) | Verteidiger sehen kaum, Treffer und Niederhalten sinken stark | Nebel treibt ab und verfliegt nach gut einer Minute; Handgranaten wirken trotzdem |
-| Draht zerschießen, dann durch die Lücke | Sturm bleibt nicht im Draht hängen | Zweiter Drahtgürtel, MG auf die Lücke |
-| Feuerwalze | Verteidiger ducken sich, bis die Stürmer da sind | Gegenbatterie: feuernde Batterien werden geortet |
-| Stoßtrupps | Feuer im Vorgehen, Handgranaten in Gräben, halten länger durch | wenige Männer, teuer |
-| Flankenfeuer | Brustwehr schützt längs des Grabens kaum | Traversen, Flanken sichern |
-| Einbruch sichern | Wer im Graben steht, richtet ihn ein, ein MG wird nachgezogen | sofortiger Gegenstoß |
+| Gas (Artillerie) | Maske auf: niedergehalten, schlechter gezielt, einige Ausfälle | treibt mit dem Wind, trifft beide Seiten |
+| Draht zerschießen, Schwachstelle suchen | Sturm bleibt nicht im Draht hängen, trifft auf wenige Verteidiger | Reserven verlegen, MG auf die Lücke |
+| Panzer voraus | fangen Feuer, walzen Draht | Tankgewehre, Geschütze im direkten Richten, Minen |
+| Feuerwalze, Abriegelungsfeuer | Verteidiger ducken sich; Gegenstöße laufen ins Sperrfeuer | Gegenbatterie: feuernde Batterien werden geortet |
+| Stoßtrupps | Feuer im Vorgehen, Handgranaten in Gräben | wenige Männer, teuer |
+| Begleit-MGs, zweite Welle | halten die Nachbarabschnitte nieder, frische Männer im Einbruch | liegen ungedeckt im Niemandsland |
+| MG an der Flanke | beherrscht das freie Feld, Flankenfeuer auf Trichter und Ruinen | Nebel, Artillerie auf MG-Nester, Panzer |
+| Graben mit Traversen | längs durch den Graben keine Sicht, Deckung stärkt die Moral | Handgranaten, Graben Abschnitt für Abschnitt aufrollen |
 | Magier über eigener Stellung | eigene Gewehre und MGs helfen im Luftkampf | nicht über feindliche Linien fliegen |
 
 Messung ohne Grafik (Testskripte wie `scripts/headless.ts`):
-- Angriff gegen einen haltenden Graben (3 Karten): erfahren 0,86 Tote je getötetem Verteidiger,
-  unerfahren 1,11.
-- Großschlacht erfahren gegen unerfahren (4 Karten, jede Seite einmal erfahren): 7 von 8 gewonnen. Den Magierkampf gewinnt die
-  erfahrene Seite 8 von 8 Mal, weil sie ihn über der eigenen Stellung annimmt.
+- Großschlacht erfahren gegen unerfahren (4 Karten, jede Seite einmal erfahren): 7 bis 8 von 8
+  gewonnen. Den Magierkampf gewinnt die erfahrene Seite fast immer, weil sie ihn über der eigenen
+  Stellung annimmt.
+- Erfahren gegen erfahren: ausgeglichen (8 Karten 3:5). Die beiden Stäbe entscheiden zeitversetzt,
+  damit keine Seite systematisch zuerst handelt.
+- Befohlener Angriff gegen einen voll besetzten Abschnitt mit Gegenstoß: Er bricht ein, kann den
+  Graben aber selten halten. Etwa 2 Angreifer fallen je Verteidiger. Gegen einen vorher
+  geschwächten Abschnitt hält der Einbruch in etwa der Hälfte der Fälle. Wer angreift, sollte also
+  erst schwächen, Schwachstellen suchen und Kräfte bündeln, wie im echten Grabenkrieg.
+- Reine Verteidigung gegen erfahrene Angreifer lohnt sich. Die KI greift deshalb nur bei
+  Überlegenheit oder Gelegenheit an.
 
 ## Wirtschaft (einfach)
 

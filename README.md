@@ -43,21 +43,33 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
   Gefallene, Explosionen mit Druckwelle und Trümmern, Rauch, Kamerawackeln, synthetischer Ton.
 - Drei Darstellungen zum Umschalten (Taste V): Klassisch, Deutlich (Farbmarker für kleine Bildschirme),
   Punkte (Übersicht).
-- **Taktik lohnt sich**:
-  - **Nebel** (Taste N) schießt eine Batterie Nebelgranaten. Auf den feindlichen Graben gelegt,
-    sehen die Verteidiger die Angreifer erst auf wenige Meter. Der Nebel treibt im Wind.
+- **Taktik lohnt sich** – alles wirkt nur über Beschuss, Treffer und Moral, es gibt keine Boni:
+  - **Angriff planen** (Taste G): Abschnitt antippen, und der Offizier führt den ganzen Angriff aus.
+    Er zerschießt den Draht und vergast den feindlichen Unterstützungsgraben. Panzer rollen voraus,
+    Nebel fällt auf den Graben, Stoßtrupps führen den Sturm. Die zweite Welle stürmt nach, sobald
+    der Einbruch steht, und Begleit-MGs rücken nach. Nochmal drücken bricht den Angriff ab.
+  - **Nebel** (N): Die Verteidiger sehen erst auf wenige Meter. **Gas** (K): Die Wolke treibt im
+    Wind, zwingt unter die Maske, hält nieder und kostet Ausfälle. Gut gegen Reserven und Batterien,
+    aber es trifft auch die eigenen Leute.
   - **Stoßtrupps** (⚔) schießen im Vorgehen und werfen Handgranaten in Gräben und Trichter.
-  - **Flankenfeuer**: Wer längs eines Grabens schießt, dem hilft die Brustwehr des Gegners kaum.
-    MGs an der Flanke und aufgerollte Gräben sind darum stark.
-  - Stürme brechen bei hohen Verlusten zusammen, statt bis zum letzten Mann zu laufen.
+  - **MGs** beherrschen das freie Feld. **Flankenfeuer** trifft Männer in Trichtern und Ruinen.
+    Gräben schützen ihre Traversen: Längs durch einen Graben sieht man nur wenige Meter weit,
+    dort hilft nur die Handgranate.
+  - **Moral**: Stürme brechen bei hohen Verlusten zusammen. Wer in guter Deckung liegt, hält
+    länger aus.
   - **Magier** sind über der eigenen Stellung am stärksten, weil Gewehre und MGs dort mithelfen.
     Tief über feindlichen Linien sind sie verwundbar.
-- Die Offiziere führen die Schlacht, du kannst jederzeit einzelne Kompanien übernehmen (✋) und
-  wieder abgeben. **Erfahrene Offiziere** zerschießen erst den Draht und legen Nebel auf den
-  Graben. Sie stürmen durch die Lücke hinter einer Feuerwalze, brechen festgefahrene Angriffe ab
-  und sichern Einbrüche mit einem nachgezogenen MG. Ihre Magier halten sie als Luftabwehr zurück.
-  Im Test gewinnen sie 7 von 8 Großschlachten gegen unerfahrene Offiziere, die einfach
-  losstürmen. Im schnellen Gefecht kannst du wählen, wie erfahren der Gegner ist.
+- **KI-Offiziere pro Flanke**, auch im schnellen Gefecht: Halten, Defensiv, Ausgewogen, Aggressiv.
+  Du kannst jederzeit einzelne Kompanien übernehmen und wieder abgeben. Solange du zuschaust,
+  halten sie eine Batterie für dich frei.
+  - **Erfahrene Offiziere** suchen Schwachstellen und greifen dort an, wo der Gegner gerade
+    geblutet hat. Sind sie insgesamt unterlegen, verteidigen sie lieber.
+  - Sie brechen festgefahrene Angriffe ab und halten ihre Magier als Luftabwehr zurück.
+  - Im Test gewinnen sie 7 bis 8 von 8 Großschlachten gegen unerfahrene Offiziere, die einfach
+    losstürmen. Im schnellen Gefecht kannst du wählen, wie erfahren der Gegner ist.
+- **Meldungen** der Offiziere, zum Beispiel „Feind stürmt links!“, „Gas Mitte!“ oder „Einbruch
+  rechts gesichert“. Antippen bringt die Kamera hin.
+- **Ton**: Trillerpfeifen, wenn ein Sturm losbricht, und Gasalarm.
 - Nachschub marschiert vom hinteren Kartenrand ein. Verluste fließen zurück in die Divisionen der
   Kampagne.
 - Im Menü gibt es außerdem **„Nur ein schnelles Gefecht“** zum Ausprobieren.
@@ -93,7 +105,7 @@ Dann auf dem Handy `http://<IP-deines-PCs>:8080` öffnen.
 | Pause / Tempo         | ⏸ 1× 2× 4× 8×               | Leertaste, 1–4       |
 | Frontpunkt öffnen     | Balken auf der Grenze       | Klick                |
 | Zurück zur Karte      | 🗺                          | Esc                  |
-| In der Schlacht       | Kompanie antippen, dann Ziel | H / S / R / O / A / N |
+| In der Schlacht       | Kompanie antippen, dann Ziel | H / S / R / O / A / N / K / G |
 
 ## Aufbau des Codes
 
