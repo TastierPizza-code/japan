@@ -1,5 +1,5 @@
 import type { Battle, Company } from "./battle.ts";
-import { FORWARD, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_STORM, UNIT_TANK, WIRE_OFFSET, WORLD_W } from "./config.ts";
+import { COMPANY_SIZE, FORWARD, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_STORM, UNIT_TANK, WIRE_OFFSET, WORLD_W } from "./config.ts";
 
 const LANES = [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6];
 const LANE_NAMES = ["links", "Mitte", "rechts"];
@@ -84,7 +84,7 @@ export class BattleAI {
     if (this.thinkTimer > 0) return;
     this.thinkTimer = 3;
 
-    const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual);
+    const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual && !c.relief);
     const foe = b.companies.filter((c) => c.side !== this.side && c.alive > 0);
     // Beobachtung: feindliche Stärke je Abschnitt, um frische Verluste zu erkennen
     this.history.push({ t: b.time, s: LANES.map((x) => strengthNear(foe, x, 300, (c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN)) });
@@ -97,6 +97,27 @@ export class BattleAI {
     this.offense(b, own, foe);
     this.artillery(b, own, foe);
     this.mages(b, own, foe);
+  }
+
+  /** Schätzfehler bei der feindlichen Reserve (Aufklärung), fest je Schlacht; 0 = noch nicht geschätzt */
+  private intel = 0;
+
+  /** Reserve einer Seite in Mann: Kampagne aus den Divisionen, im Gefecht die abrufbaren Kompanien */
+  private reserveMen(b: Battle, side: number) {
+    const s = b.sides[side];
+    return b.campaign ? s.pool : s.reserves * COMPANY_SIZE;
+  }
+
+  /**
+   * Tiefe: Feld plus Reserve, eigene gegen (geschätzte) feindliche. Erfahrene Offiziere
+   * greifen nur an, wenn sie einen Durchbruch auch halten können – nicht bloß, weil vorn
+   * gerade mehr Leute stehen.
+   */
+  depthRatio(b: Battle): number {
+    if (this.intel === 0) this.intel = 0.8 + b.rng.next() * 0.4;
+    const mine = b.groundStrength(this.side) + this.reserveMen(b, this.side);
+    const theirs = b.groundStrength(1 - this.side) + this.reserveMen(b, 1 - this.side) * this.intel;
+    return mine / Math.max(1, theirs);
   }
 
   /** Meldung von außen (etwa: Verstärkung trifft ein) */
@@ -289,7 +310,10 @@ export class BattleAI {
       const aggr = this.maxAggression();
       if (this.attackWait > 0 || aggr === 0) return;
       // Klar überlegen: kein Stückwerk mehr, alles auf einmal
-      if (this.veteran && b.groundStrength(this.side) > b.groundStrength(1 - this.side) * 1.6 && b.time > 300 && this.generalAttack(b)) return;
+      const depth = this.depthRatio(b);
+      // (Feld und Reserve zusammen: wer insgesamt klar stärker ist, kann den Durchbruch auch halten)
+      const field = b.groundStrength(this.side) / Math.max(1, b.groundStrength(1 - this.side));
+      if (this.veteran && field > 1.2 && Math.sqrt(field * depth) > 1.3 && b.time > 300 && this.generalAttack(b)) return;
       // Flanke mit dem besten Kräfteverhältnis (nur Flanken, die angreifen dürfen)
       let best = -1;
       let bestScore = 0;
@@ -313,7 +337,8 @@ export class BattleAI {
       }
       // Erfahrene Offiziere greifen nur mit örtlicher Überlegenheit an – und wer insgesamt
       // unterlegen ist, verteidigt lieber, außer der Gegner hat gerade schwer geblutet
-      const ratio = b.groundStrength(this.side) / Math.max(1, b.groundStrength(1 - this.side));
+      // … gemessen an Feld und Reserve zusammen
+      const ratio = Math.sqrt((b.groundStrength(this.side) / Math.max(1, b.groundStrength(1 - this.side))) * depth);
       const need = this.veteran ? (ratio < 1 ? 1.3 / Math.max(0.5, ratio) ** 2 : 1.3) : 0.6;
       if (best < 0 || bestScore < need) {
         this.attackWait = 30;
@@ -331,13 +356,13 @@ export class BattleAI {
     if (!a.planned && AGGRESSION[this.stances[laneOf(a.lane)]] === 0) {
       a.units.forEach((id) => {
         const c = b.companies[id];
-        if (c.alive > 0 && !c.manual) b.orderRetreat(id);
+        if (c.alive > 0 && !c.manual && !c.relief) b.orderRetreat(id);
       });
       this.endAttack(b);
       return;
     }
     a.timer += 3;
-    const units = a.units.map((id) => b.companies[id]).filter((c) => c.alive > 0 && c.order !== "rout" && !c.manual);
+    const units = a.units.map((id) => b.companies[id]).filter((c) => c.alive > 0 && c.order !== "rout" && !c.manual && !c.relief);
     if (!units.some((c) => c.type === UNIT_RIFLE || c.type === UNIT_STORM)) {
       this.endAttack(b);
       return;
@@ -523,7 +548,7 @@ export class BattleAI {
       } else b.orderRetreat(c.id);
     }
     if (holding.length === 0) return;
-    const mgs = b.companies.filter((c) => c.side === this.side && c.type === UNIT_MG && c.alive > 0 && c.order === "advance" && !c.manual);
+    const mgs = b.companies.filter((c) => c.side === this.side && c.type === UNIT_MG && c.alive > 0 && c.order === "advance" && !c.manual && !c.relief);
     const mg = mgs.sort((p, q) => Math.abs(p.cx - a.breach) - Math.abs(q.cx - a.breach))[0];
     if (mg && mgs.length >= 2) {
       const y = b.terrain.frontY(1 - this.side, a.breach);
@@ -542,7 +567,7 @@ export class BattleAI {
   private prepareWave(b: Battle, a: Attack, jumpY: (x: number) => number) {
     const fwd = FORWARD[this.side];
     const fresh = b.companies
-      .filter((c) => c.side === this.side && c.alive > 60 && c.type === UNIT_RIFLE && c.order === "advance" && !c.manual && !a.units.includes(c.id))
+      .filter((c) => c.side === this.side && c.alive > 60 && c.type === UNIT_RIFLE && c.order === "advance" && !c.manual && !c.relief && !a.units.includes(c.id))
       .filter((c) => (c.cy - this.front(b, c.cx)) * fwd <= 20)
       .sort((p, q) => Math.abs(p.cx - a.breach) - Math.abs(q.cx - a.breach));
     const manned = (skip: Company) =>
@@ -670,7 +695,7 @@ export class BattleAI {
   planAttack(b: Battle, x: number): boolean {
     if (this.attack || b.result) return false;
     const lane = Math.max(150, Math.min(WORLD_W - 150, x));
-    const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual);
+    const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual && !c.relief);
     return this.startAttack(b, own, lane, true);
   }
 
@@ -695,7 +720,7 @@ export class BattleAI {
     const goals = b.objectives.filter((o) => o.owner === enemy).map((o) => ({ x: o.x, men: 0 }));
     if (goals.length === 0) goals.push(...LANES.map((x) => ({ x, men: 0 })));
     const units = b.companies
-      .filter((c) => c.side === this.side && c.alive > 0 && !c.manual && c.order !== "rout")
+      .filter((c) => c.side === this.side && c.alive > 0 && !c.manual && !c.relief && c.order !== "rout")
       .filter((c) => c.type === UNIT_RIFLE || c.type === UNIT_STORM || c.type === UNIT_FLAME || c.type === UNIT_TANK)
       .sort((p, q) => q.alive - p.alive);
     const total = units.reduce((n, c) => n + (c.type === UNIT_TANK ? 60 : c.alive), 0);
@@ -738,7 +763,7 @@ export class BattleAI {
     const fwd = FORWARD[this.side];
     let n = 0;
     for (const c of b.companies) {
-      if (c.side !== this.side || c.alive <= 0 || c.type === UNIT_GUN || c.type === UNIT_MAGE) continue;
+      if (c.side !== this.side || c.alive <= 0 || c.type === UNIT_GUN || c.type === UNIT_MAGE || c.relief) continue;
       // Heimat vor der eigenen Front (eroberter Graben, Niemandsland) → neuer Platz im eigenen Graben
       if ((c.homeY - this.front(b, c.homeX)) * fwd > 40) {
         const slot = b.freeSlot(this.side, true, laneOf(c.cx));
@@ -777,7 +802,7 @@ export class BattleAI {
     if (!this.attack) return;
     for (const id of this.attack.units) {
       const c = b.companies[id];
-      if (c.alive > 0 && !c.manual) b.orderRetreat(id);
+      if (c.alive > 0 && !c.manual && !c.relief) b.orderRetreat(id);
     }
     this.endAttack(b);
   }

@@ -121,6 +121,8 @@ export interface Company {
   division: number;
   /** Spieler hat direkt befohlen → KI-Offizier lässt die Kompanie in Ruhe */
   manual: boolean;
+  /** abgelöst: marschiert zum hinteren Rand und verlässt das Gefecht, nimmt keine Befehle mehr an */
+  relief: boolean;
   /** Batterien: ab wann wieder feuerbereit */
   readyAt: number;
 }
@@ -202,6 +204,10 @@ export interface SideState {
   reserves: number;
   reserveCooldown: number;
   initialStrength: number;
+  /** Kampagne: Mann in Reserve hinter diesem Abschnitt (noch nicht auf dem Feld) */
+  pool: number;
+  /** Kampagne: Sekunden bis zur nächsten frischen Kompanie (Nachschubtempo), 0 = unbekannt */
+  flowEvery: number;
 }
 
 /** Ereignisse für Darstellung und Ton. Werden vom Renderer geleert. */
@@ -324,7 +330,7 @@ export class Battle {
     this.terrain = new Terrain(this.rng, opts.biome);
     this.campaign = opts.campaign ?? false;
     for (let s = 0; s < 2; s++) {
-      this.sides.push({ artyCharges: 0, artyMax: 0, artyTimer: 0, reserves: this.campaign ? 0 : START_RESERVES, reserveCooldown: 0, initialStrength: 0 });
+      this.sides.push({ artyCharges: 0, artyMax: 0, artyTimer: 0, reserves: this.campaign ? 0 : START_RESERVES, reserveCooldown: 0, initialStrength: 0, pool: 0, flowEvery: 0 });
       for (const x of [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6]) {
         this.objectives.push({ x, y: this.terrain.frontY(s, x), owner: s, capture: 0, capturer: -1 });
       }
@@ -439,20 +445,20 @@ export class Battle {
 
   orderMove(companyId: number, x: number, y: number) {
     const c = this.companies[companyId];
-    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN) return;
+    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN || c.relief) return;
     this.setTarget(c, x, y, "advance");
   }
 
   orderStorm(companyId: number, x: number, y: number) {
     const c = this.companies[companyId];
-    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN) return;
+    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN || c.relief) return;
     const plain = c.type === UNIT_MAGE || c.type === UNIT_TANK || c.type === UNIT_MG;
     this.setTarget(c, x, y, plain ? "advance" : "storm");
   }
 
   orderHold(companyId: number) {
     const c = this.companies[companyId];
-    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN) return;
+    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN || c.relief) return;
     c.order = "advance";
     c.tx = c.cx;
     c.ty = c.cy;
@@ -468,7 +474,7 @@ export class Battle {
 
   orderRetreat(companyId: number) {
     const c = this.companies[companyId];
-    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN) return;
+    if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN || c.relief) return;
     // Panzer fahren zurück und bleiben kampfbereit (für sie gibt es keinen Sammelpunkt)
     this.setTarget(c, c.homeX, c.homeY, c.type === UNIT_TANK ? "advance" : "retreat");
   }
@@ -522,7 +528,9 @@ export class Battle {
     if (this.result) return;
     this.time += dt;
     this.rebuildGrids();
-    if (this.n > 3000 && this.idCount[0] + this.idCount[1] < this.n * 0.5) {
+    const living = this.idCount[0] + this.idCount[1];
+    // aufräumen, wenn viele gefallen sind – oder der Platz knapp wird
+    if ((this.n > 3000 && living < this.n * 0.5) || (this.n > MAX_UNITS - 2500 && living < this.n - 300)) {
       this.compact();
       this.rebuildGrids();
     }
@@ -535,7 +543,7 @@ export class Battle {
     if (this.domes.length > 0) this.domes = this.domes.filter((d) => d.until > this.time);
     this.updateSides(dt);
     this.updateObjectives(dt);
-    if (!this.campaign && Math.floor(this.time) !== Math.floor(this.time - dt)) this.checkVictory();
+    if (Math.floor(this.time) !== Math.floor(this.time - dt)) this.checkVictory();
   }
 
   clearEvents() {
@@ -1519,7 +1527,11 @@ export class Battle {
         if (c.side === s && c.type !== UNIT_MAGE && c.type !== UNIT_GUN && c.order !== "rout") fighting += c.alive;
       }
       const side = this.sides[s];
-      if (side.reserves === 0 && fighting < side.initialStrength * 0.08) {
+      // Kampagne: zerschlagen erst, wenn auch hinten keine Reserve mehr steht
+      const broken = this.campaign
+        ? this.time > 60 && side.initialStrength > 0 && side.pool < 30 && fighting <= side.initialStrength * 0.08
+        : side.reserves === 0 && fighting < side.initialStrength * 0.08;
+      if (broken) {
         this.result = { winner: 1 - s, reason: "Der Gegner ist zerschlagen" };
         return;
       }
@@ -1540,6 +1552,19 @@ export class Battle {
     c.homeY = y;
     if (!teleport && type !== UNIT_GUN) this.setTarget(c, x, y, "advance");
     return c;
+  }
+
+  /**
+   * Ablösung: eine abgekämpfte Kompanie marschiert zum hinteren Rand und verlässt dort das
+   * Gefecht (die Leute gehen zurück in ihre Division). Unterwegs kann sie weiter getroffen werden.
+   */
+  relieveCompany(id: number) {
+    const c = this.companies[id];
+    if (!c || c.alive === 0 || c.relief) return;
+    c.relief = true;
+    c.homeX = c.cx;
+    c.homeY = REAR_Y[c.side];
+    this.setTarget(c, c.cx, REAR_Y[c.side], "retreat");
   }
 
   /** Kompanie verlässt das Gefecht (verlegt), ohne dass jemand stirbt. */
@@ -1578,6 +1603,7 @@ export class Battle {
       domeReady: 0,
       division: -1,
       manual: false,
+      relief: false,
       readyAt: 0,
     };
     this.companies.push(c);

@@ -16,7 +16,7 @@ import {
   UNIT_TANK,
   WORLD_W,
 } from "../sim/config.ts";
-import { FIELD_RIFLE_COMPANIES } from "./config.ts";
+import { FIELD_RIFLE_CAP, FIELD_RIFLE_MEN, FIELD_SHARE_MIN, FLOW_BASE, FLOW_MAX, FLOW_MIN, RELIEF_BELOW } from "./config.ts";
 import type { Division, FrontPoint, World } from "./world.ts";
 
 const LANES = [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6];
@@ -36,6 +36,11 @@ export class FrontBattle {
   private lastAlive = new Map<number, number>();
   private syncTimer = 0;
   private acc = 0;
+  /** je Schlachtseite: Sekunden bis die nächste frische Schützenkompanie einrücken darf */
+  private flowWait = [0, 0];
+  /** Meldung „Verstärkung“ gesammelt, höchstens alle 30 s je Seite */
+  private arrivedMen = [0, 0];
+  private arrivedAt = [-100, -100];
 
   constructor(world: World, point: FrontPoint) {
     this.pointId = point.id;
@@ -73,6 +78,8 @@ export class FrontBattle {
       world.battleDecided(p, this.sideMap[this.battle.result.winner]);
       return;
     }
+    this.flowWait[0] -= dt;
+    this.flowWait[1] -= dt;
     this.syncTimer -= dt;
     if (this.syncTimer <= 0) {
       this.syncTimer = 0.25;
@@ -126,16 +133,54 @@ export class FrontBattle {
       const divs = world.divisionsAt(point.id, this.sideMap[bs]).sort((x, y) => x.id - y.id);
       const onField = new Map<number, number>();
       let rifles = 0;
+      let rifleMen = 0;
       const count: Record<number, number> = {};
-      // Wer an diesem Punkt deutlich stärker ist, bringt entsprechend mehr Kompanien aufs Feld
-      const ratio = (point.strength[this.sideMap[bs]] + 1) / (point.strength[this.sideMap[1 - bs]] + 1);
-      const maxRifles = Math.max(FIELD_RIFLE_COMPANIES, Math.min(18, Math.round(FIELD_RIFLE_COMPANIES * Math.sqrt(ratio))));
+      // Frontbreite: das Feld fasst FIELD_RIFLE_MEN Schützen, aufgeteilt nach Gesamtstärke am Punkt
+      const mine = point.strength[this.sideMap[bs]];
+      const theirs = point.strength[this.sideMap[1 - bs]];
+      const share = Math.min(1 - FIELD_SHARE_MIN, Math.max(FIELD_SHARE_MIN, (mine + 1) / (mine + theirs + 2)));
+      const budget = FIELD_RIFLE_MEN * share;
+      const side = b.sides[bs];
       for (const c of b.companies) {
         if (c.side !== bs || c.alive <= 0) continue;
+        // Abgelöste am hinteren Rand angekommen: verlassen das Gefecht, die Leute gehen zurück in die Division
+        if (c.relief && Math.abs(c.cy - REAR_Y[bs]) < 60) {
+          b.withdrawCompany(c.id);
+          this.lastAlive.set(c.id, 0);
+          continue;
+        }
         onField.set(c.division, (onField.get(c.division) ?? 0) + c.alive);
-        if (c.type === UNIT_RIFLE && c.order !== "rout") rifles++;
+        if (c.type === UNIT_RIFLE && c.order !== "rout" && !c.relief) {
+          rifles++;
+          rifleMen += c.alive;
+        }
         count[c.type] = (count[c.type] ?? 0) + 1;
       }
+      // Reserve: Schützen, die hinter diesem Abschnitt warten (für Nachschubtempo, KI und Anzeige)
+      let pool = 0;
+      for (const d of divs) pool += Math.max(0, d.soldiers - (onField.get(d.id) ?? 0));
+      let riflePool = 0;
+      for (const d of divs) if (d.kind === "infantry") riflePool += Math.max(0, d.soldiers - (onField.get(d.id) ?? 0));
+      const flowEvery = Math.min(FLOW_MAX, Math.max(FLOW_MIN, FLOW_BASE / Math.sqrt(Math.max(0.25, riflePool / 1000))));
+      side.pool = pool;
+      side.flowEvery = riflePool >= 30 ? flowEvery : 0;
+      side.initialStrength = Math.max(side.initialStrength, b.groundStrength(bs));
+      // Ablösung: abgekämpfte Kompanien ohne Feindkontakt gehen zurück, wenn Ersatz bereitsteht
+      if (riflePool >= COMPANY_SIZE / 2) {
+        for (const c of b.companies) {
+          if (c.side !== bs || c.alive <= 0 || c.type !== UNIT_RIFLE || c.relief || c.order !== "advance") continue;
+          if (c.alive >= c.initial * RELIEF_BELOW || c.initial < COMPANY_SIZE / 2) continue;
+          if (b.countNear(1 - bs, c.cx, c.cy, 260) > 0) continue;
+          b.relieveCompany(c.id);
+          rifles--;
+          rifleMen -= c.alive;
+        }
+      }
+      // Ist der eigene vordere Graben in einem Abschnitt verloren, sammelt sich Nachschub im zweiten Graben
+      const frontLost = LANES.map((x) => {
+        const y = b.terrain.frontY(bs, x);
+        return b.countNear(1 - bs, x, y, 220) > b.countNear(bs, x, y, 220) + 20;
+      });
       const slotOf = (type: number) => count[type] ?? 0;
       const bump = (type: number) => (count[type] = (count[type] ?? 0) + 1);
       const mgSpots = b.mgSpots(bs);
@@ -153,11 +198,17 @@ export class FrontBattle {
           bump(type);
         };
         if (d.kind === "infantry") {
-          while (spare >= 30 && rifles < maxRifles) {
+          // Zu Beginn stehen alle bereit; danach rücken frische Kompanien im Takt des Nachschubs ein
+          while (spare >= 30 && rifles < FIELD_RIFLE_CAP && rifleMen + COMPANY_SIZE / 2 <= budget && (initial || this.flowWait[bs] <= 0)) {
             // Dort hin, wo die Front am dünnsten besetzt ist – nicht alle auf dieselben drei Punkte
-            const { x, y } = b.freeSlot(bs, true);
-            spawn(UNIT_RIFLE, `${num}.${++k}`, x, y, Math.min(COMPANY_SIZE, spare));
+            let { x, y } = b.freeSlot(bs, true);
+            const lane = Math.min(2, Math.floor((x / WORLD_W) * 3));
+            if (!initial && frontLost[lane]) ({ x, y } = b.freeSlot(bs, false, lane));
+            const size = Math.min(COMPANY_SIZE, spare);
+            spawn(UNIT_RIFLE, `${num}.${++k}`, x, y, size);
             rifles++;
+            rifleMen += size;
+            if (!initial) this.flowWait[bs] = flowEvery;
           }
         } else if (d.kind === "mg") {
           while (spare >= 1) {
@@ -197,8 +248,13 @@ export class FrontBattle {
         } else if (d.kind === "mage") {
           if (spare >= 1) spawn(UNIT_MAGE, `✦ ${num}`, WORLD_W / 2, REAR_Y[bs], spare);
         }
-        // Meldung: Verstärkung erscheint am hinteren Rand und rückt ein
-        if (!initial && arrived > 0) this.ai[bs].notify(`Verstärkung: ${d.name} (${arrived}) rückt von hinten an`, "good", WORLD_W / 2, REAR_Y[bs]);
+        if (!initial) this.arrivedMen[bs] += arrived;
+      }
+      // Meldung: Verstärkung erscheint am hinteren Rand und rückt ein (gesammelt)
+      if (this.arrivedMen[bs] > 0 && b.time - this.arrivedAt[bs] >= 30) {
+        this.ai[bs].notify(`Verstärkung: ${this.arrivedMen[bs]} Mann rücken von hinten an · Reserve ${Math.round(pool / 100) * 100}`, "good", WORLD_W / 2, REAR_Y[bs]);
+        this.arrivedMen[bs] = 0;
+        this.arrivedAt[bs] = b.time;
       }
     }
   }

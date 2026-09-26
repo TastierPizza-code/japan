@@ -126,8 +126,24 @@ export const TRAVEL_KM_PER_SEC = 1.2;
 /** Mindestdauer einer Verlegung in Sekunden. */
 export const TRAVEL_MIN = 20;
 
-/** Höchstens so viele Schützenkompanien pro Seite gleichzeitig auf dem Gefechtsfeld. */
-export const FIELD_RIFLE_COMPANIES = 8;
+/**
+ * Frontbreite: so viele Schützen passen zusammen (beide Seiten) auf ein Gefechtsfeld. Der Rest
+ * steht als Reserve dahinter. Aufgeteilt wird nach Gesamtstärke am Frontpunkt, je Seite
+ * mindestens FIELD_SHARE_MIN und höchstens 1 - FIELD_SHARE_MIN.
+ */
+export const FIELD_RIFLE_MEN = 9000;
+export const FIELD_SHARE_MIN = 0.3;
+/** Obergrenze Schützenkompanien je Seite (Leistung, Platz im Graben) */
+export const FIELD_RIFLE_CAP = 30;
+/**
+ * Nachschubtempo: Sekunden zwischen zwei frischen Kompanien = FLOW_BASE / √(Reserve in Tausend),
+ * begrenzt auf FLOW_MIN…FLOW_MAX. Große Reserven füllen Lücken schnell, fast leere nur tröpfchenweise.
+ */
+export const FLOW_BASE = 30;
+export const FLOW_MIN = 4;
+export const FLOW_MAX = 40;
+/** Ablösung: Schützenkompanien unter diesem Anteil gehen zurück (ohne Feindkontakt, wenn Ersatz da ist) */
+export const RELIEF_BELOW = 0.25;
 
 // ------------------------------------------------------------ Wirtschaft (pro Tag)
 

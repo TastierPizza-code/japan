@@ -55,9 +55,16 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
   - Den Offizieren gibst du Haltungen je Flanke, befiehlst Angriffe, den **Generalangriff** (G) auf
     alle feindlichen Stellungen oder den **vollen Rückzug** (Q) und steuerst die Artillerie.
 - **Kampagne**: Wer in einer Schlacht alle Stellungen nimmt oder den Gegner zerschlägt, nimmt die
-  Provinz sofort. Truppen, die dort stehen oder unterwegs sind, gehen an die neue Front. Die
-  überlegene Seite bringt mehr Kompanien aufs Feld, bis zu 18 statt 8. Trifft Verstärkung ein,
-  meldet der Offizier das. Sie rückt vom hinteren Kartenrand ein.
+  Provinz sofort. Truppen, die dort stehen oder unterwegs sind, gehen an die neue Front.
+- **Frontbreite und Reserve**: Ein Gefechtsfeld fasst zusammen etwa 9.000 Schützen, aufgeteilt nach
+  Gesamtstärke am Frontpunkt (höchstens 70 : 30). Der Rest wartet als Reserve dahinter und wird oben
+  angezeigt. Lücken füllt der Nachschub im Takt der Reserve (große Reserve: alle ~5 s eine frische
+  Kompanie, fast leere: alle 30–40 s). Ist der vordere Graben verloren, sammelt er sich im zweiten Graben.
+  Abgekämpfte Kompanien (unter 25 %) ohne Feindkontakt werden abgelöst und gehen zurück in ihre
+  Division. Zerschlagen ist eine Seite erst, wenn Feld und Reserve aufgebraucht sind.
+- Die Offiziere rechnen beim Generalangriff mit Feld **und** Reserve (die feindliche geschätzt):
+  Wer insgesamt klar stärker ist, greift an. Tests: 1,5 : 1 gewinnt in etwa 10 Minuten, 1,3 : 1
+  in etwa einer halben Stunde, Gleichstand bleibt ein offenes Ringen.
 - **Artillerie** reicht nur bis knapp hinter den feindlichen vorderen Graben. Im Graben hält sie
   vor allem nieder, tödlich ist sie für Truppen im Freien.
 - **Überlegenheit gewinnt**: Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer

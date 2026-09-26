@@ -355,6 +355,16 @@ class App {
         <li>Am besten <b>kontern</b>: dort angreifen, wo der Feind gerade bei einem Sturm geblutet hat.</li>
         <li>Gegen einen voll besetzten Graben scheitert fast jeder Angriff. Schwäche ihn vorher mit Artillerie und Magiern.</li>
       </ul>
+      <h3>Front und Reserve (Kampagne)</h3>
+      <ul>
+        <li>Ein Abschnitt fasst nur eine begrenzte Zahl Schützen. Aufgeteilt wird nach Gesamtstärke am Frontpunkt (höchstens 70 : 30),
+        der Rest wartet als <b>Reserve</b> dahinter (oben angezeigt).</li>
+        <li>Lücken füllt der Nachschub <b>im Takt</b>: Eine große Reserve schickt schnell frische Kompanien, eine fast leere nur tröpfchenweise.
+        Ist der vordere Graben verloren, sammeln sie sich im zweiten Graben.</li>
+        <li>Abgekämpfte Kompanien werden <b>abgelöst</b>: Sie gehen nach hinten zurück in ihre Division, frische rücken nach.</li>
+        <li>Nach einem geglückten Generalangriff bleibt dir ein Zeitfenster, die Stellungen zu nehmen, bevor der Feind neu aufgefüllt hat.
+        Alle Stellungen genommen oder Feind samt Reserve zerschlagen: Die Provinz fällt.</li>
+      </ul>
       <h3>Artillerie</h3>
       <ul>
         <li>Die Geschütze reichen nur bis knapp hinter den <b>feindlichen vorderen Graben</b> (gelbe Linie im Artilleriemodus).</li>

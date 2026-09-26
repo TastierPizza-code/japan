@@ -29,6 +29,14 @@ const STANCE_ORDER: Stance[] = ["hold", "defensive", "balanced", "aggressive"];
 const LANE_NAMES = ["Links", "Mitte", "Rechts"];
 
 /** Ansicht einer laufenden Schlacht: Darstellung, Auswahl und Befehle. */
+/** Reserve hinter dem Abschnitt und Nachschubtempo beider Seiten (Kampagne) */
+function reserveInfo(b: Battle, me: number): string {
+  const tempo = (every: number) => (every <= 0 ? "leer" : every <= 8 ? "schnell" : every <= 18 ? "mittel" : "langsam");
+  const one = (s: number, color: string) =>
+    `<span style="color:var(${color})">${fmt(b.sides[s].pool)} · ${tempo(b.sides[s].flowEvery)}</span>`;
+  return `<small class="reserve" title="Reserve: Soldaten, die hinter diesem Abschnitt warten. Große Reserven füllen Lücken schneller auf.">Reserve ${one(me, "--player")} : ${one(1 - me, "--enemy")}</small>`;
+}
+
 export class BattleView {
   ctx: BattleContext | null = null;
   cam = new Camera();
@@ -427,7 +435,8 @@ export class BattleView {
         `<span style="color:var(--player)">${nA.short} ${fmt(mine)}</span>` +
         `<span class="capbar" title="Dein Anteil an der Gesamtstärke: ab 70 % rückst du vor, unter 30 % der Feind"><i style="left:${share * 100}%"></i></span>` +
         `<span style="color:var(--enemy)">${fmt(theirs)} ${nB.short}</span>` +
-        `<small>${Math.round(share * 100)}%${Math.abs(bar) >= 1 ? ` · ${bar > 0 ? "Vormarsch" : "Rückzug"} ${Math.round(Math.abs(bar))}%` : ""}</small>`;
+        `<small>${Math.round(share * 100)}%${Math.abs(bar) >= 1 ? ` · ${bar > 0 ? "Vormarsch" : "Rückzug"} ${Math.round(Math.abs(bar))}%` : ""}</small>` +
+        reserveInfo(b, point.battle ? point.battle.battleSide(ps) : PLAYER);
       // Flanken-Haltungen
       const flank = $("#flankRow");
       const principal = ps === 0 ? point.a : point.b;
