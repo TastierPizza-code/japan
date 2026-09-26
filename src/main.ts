@@ -330,9 +330,18 @@ class App {
     d.hidden = false;
     d.innerHTML = `<div class="card help">
       <h1>Taktik</h1>
-      <p>Du führst die <b>Magier</b> selbst: Magier antippen, dann das Ziel. Nach getaner Arbeit schickst du sie zum Aufladen <i>zurück</i>.
-      Alle anderen Kompanien führen deine <b>Offiziere</b>, je Flanke mit einer Haltung:
+      <p>Du führst die <b>Magier</b>. Alle anderen Kompanien führen deine <b>Offiziere</b>, je Flanke mit einer Haltung:
       <i>Halten · Defensiv · Ausgewogen · Aggressiv</i>. Du gibst die großen Befehle.</p>
+      <h3>Magier</h3>
+      <ul>
+        <li>Befehle für alle Staffeln: <b>Luftschutz</b> (L) über der eigenen Stellung, <b>Begleiten</b> (B) eigener Stürme,
+        <b>Jagd</b> (J) auf MG-Nester und Truppen im Freien. Oder du tippst die Magier an und führst sie direkt.</li>
+        <li><b>Sprengzauber</b> (Z): große Explosion, trifft auch im Graben. <b>Kuppel</b> (X): Kugeln und Splitter prallen an
+        deinen Truppen darunter ab. Beides braucht Mana und hat eine Abklingzeit.</li>
+        <li>Über der eigenen Stellung laden die Magier langsam Mana nach, zu Hause schnell (<b>Zurück</b>, R).
+        Ihr Schild erholt sich, wenn sie kurz nicht getroffen werden. MGs und Gewehre holen sie aber herunter,
+        wenn sie tief über feindliche Gräben fliegen.</li>
+      </ul>
       <h3>Angreifen</h3>
       <ul>
         <li><b>Überlegenheit gewinnt.</b> Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer unterlegen im Graben sitzt, bricht.</li>
@@ -356,7 +365,6 @@ class App {
       <ul>
         <li><b>MGs</b> beherrschen das freie Feld, <b>Panzer</b> sind dagegen immun. Tankgewehre und Geschütze knacken sie.</li>
         <li><b>Gräben</b> haben Traversen: Längs hindurch sieht man nur wenige Meter weit, dort helfen Handgranaten.</li>
-        <li><b>Magier</b> kämpfen am besten über der eigenen Stellung, wo Gewehre und MGs mithelfen.</li>
         <li>Meldungen oben antippen, dann springt die Kamera hin. <b>Leertaste</b> pausiert.</li>
       </ul>
       <button id="helpClose" class="wide primary">Weiter</button></div>`;

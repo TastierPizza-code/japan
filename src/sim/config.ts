@@ -94,7 +94,7 @@ export const STATS: Record<number, WeaponStats> = {
     reloadJitter: 0.6,
     hit: 0.55,
     suppress: 0.5,
-    hp: 14,
+    hp: 18,
     walk: 45,
     run: 55,
     fireWhileMoving: true,
@@ -181,15 +181,32 @@ export const AT_PER_SQUAD = 8;
 export const FLAME_PER_SQUAD = 10;
 
 /** Treffer-Multiplikator, wenn auf fliegende Magier geschossen wird. */
-export const MAGE_EVASION = 0.3;
+export const MAGE_EVASION = 0.4;
+/** MGs sind die beste Flugabwehr: so viel besser treffen sie Magier als Gewehre */
+export const MG_ANTI_MAGE = 2;
 export const MAGE_SPELL_RADIUS = 14;
 /** Trefferchance eines Zaubers mitten im Wirkungskreis (ohne Deckung) */
-export const MAGE_SPELL_KILL = 0.45;
+export const MAGE_SPELL_KILL = 0.3;
 export const MAGE_MANA_MAX = 100;
-export const MAGE_MANA_DRAIN = 0.5; // pro Sekunde im Einsatz
-export const MAGE_MANA_PER_SPELL = 2.5; // pro Zauber eines einzelnen Magiers
-export const MAGE_MANA_REGEN = 2.5; // pro Sekunde zu Hause
-export const MAGE_SHIELD_REGEN = 0.6;
+export const MAGE_MANA_DRAIN = 0.15; // pro Sekunde im Einsatz
+export const MAGE_MANA_PER_SPELL = 1; // pro Zauber eines einzelnen Magiers
+export const MAGE_MANA_REGEN = 4; // pro Sekunde zu Hause
+/** über der eigenen Stellung lädt das Mana langsam nach */
+export const MAGE_MANA_REGEN_OWN = 0.8;
+/** Schild: lädt schnell nach, wenn der Magier ein paar Sekunden nicht getroffen wurde */
+export const MAGE_SHIELD_REGEN = 2;
+export const MAGE_SHIELD_DELAY = 4;
+/** Sprengzauber: große Explosion (Mana, Abklingzeit, Radius, Reichweite vom Magier aus) */
+export const MAGE_BLAST_MANA = 25;
+export const MAGE_BLAST_COOLDOWN = 60;
+export const MAGE_BLAST_RADIUS = 34;
+export const MAGE_ABILITY_RANGE = 320;
+/** Schutzkuppel: schwächt Gewehr-, MG- und Splitterfeuer auf die Truppen darunter */
+export const MAGE_DOME_MANA = 30;
+export const MAGE_DOME_COOLDOWN = 70;
+export const MAGE_DOME_RADIUS = 70;
+export const MAGE_DOME_DURATION = 25;
+export const MAGE_DOME_FACTOR = 0.35;
 
 export const MELEE_RANGE = 6;
 export const MELEE_KILL = 0.35;

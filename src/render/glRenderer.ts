@@ -502,6 +502,16 @@ export class GlRenderer {
     // --- Nebelwände
     this.drawSmoke(b, inView);
 
+    // --- Schutzkuppeln der Magier: schimmernde Glocke
+    for (const d of b.domes) {
+      if (!inView(d.x, d.y) && !inView(d.x + d.r, d.y) && !inView(d.x - d.r, d.y)) continue;
+      const fade = Math.min(1, (b.time - d.t0) / 0.6) * Math.min(1, (d.until - b.time) / 3);
+      const c = MAGE_COLOR[d.side];
+      const pulse = 0.85 + 0.15 * Math.sin(this.time * 3 + d.x);
+      this.shape(d.x, d.y, d.r * 2, M_SOFT, c[0], c[1], c[2], 0.12 * fade);
+      this.shape(d.x, d.y, d.r * 2 * pulse, M_RING, c[0], c[1], c[2], 0.55 * fade);
+    }
+
     // --- Magier schweben über allem
     for (let s = 0; s < 2; s++) {
       for (const i of b.unitsOf(s, UNIT_MAGE)) {

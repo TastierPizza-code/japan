@@ -774,14 +774,22 @@ button.stance.aggressive {
   flex: 1;
 }
 
-/* Unterstützung: auf schmalen Bildschirmen in zwei Zeilen statt abgeschnitten */
-#support {
+/* Magier und Unterstützung: auf schmalen Bildschirmen umbrechen statt abschneiden */
+#support,
+#orders {
   flex-wrap: wrap;
 }
 
 #support button {
   flex: 1 1 22%;
   min-width: 0;
+  white-space: normal;
+}
+
+#orders button {
+  flex: 1 1 30%;
+  min-width: 0;
+  white-space: normal;
 }
 
 #support #fit {

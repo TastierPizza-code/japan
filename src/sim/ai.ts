@@ -511,6 +511,62 @@ export class BattleAI {
     a.infantryGo = true;
   }
 
+  /** Wo stürmen gerade eigene Leute (Angriff, Generalangriff) oder wird ein Einbruch gehalten? */
+  private stormFocus(b: Battle): { x: number; y: number } | null {
+    const a = this.attack;
+    if (a && (a.stage === "storm" || a.stage === "smoke" || a.stage === "tanks")) return { x: a.breach, y: b.terrain.frontY(1 - this.side, a.breach) };
+    if (this.generalUntil > b.time) {
+      const st = b.companies.filter((c) => c.side === this.side && c.order === "storm" && c.alive > 20).sort((p, q) => q.alive - p.alive)[0];
+      if (st) return { x: st.cx, y: b.terrain.frontY(1 - this.side, st.cx) };
+    }
+    if (this.held && this.held.until > b.time) return this.held;
+    return null;
+  }
+
+  /**
+   * Fähigkeiten der Magier: Schutzkuppel über den eigenen Sturm, Sprengzauber auf die
+   * dichteste feindliche Ansammlung in Reichweite (Stürmer vor der eigenen Stellung zuerst).
+   */
+  private mageAbilities(b: Battle, mages: Company[], foe: Company[]) {
+    const focus = this.stormFocus(b);
+    for (const m of mages) {
+      if (m.alive < m.initial * 0.5) continue;
+      if (focus) {
+        // Kuppel über die eigenen Stürmer, die dem Ziel am nächsten sind
+        const st = b.companies
+          .filter((c) => c.side === this.side && c.order === "storm" && c.alive > 20 && Math.hypot(c.cx - m.cx, c.cy - m.cy) < 300)
+          .sort((p, q) => Math.hypot(p.cx - focus.x, p.cy - focus.y) - Math.hypot(q.cx - focus.x, q.cy - focus.y))[0];
+        if (st && Math.hypot(st.cx - focus.x, st.cy - focus.y) < 260 && !b.mageCan(m.id, "dome", st.cx, st.cy)) b.mageDome(m.id, st.cx, st.cy);
+      } else {
+        // Verteidigung: Kuppel über die eigene Grabenbesatzung, auf die ein feindlicher Sturm zurollt
+        const fwd = FORWARD[this.side];
+        const storm = foe
+          .filter((c) => c.order === "storm" && c.alive > 40 && (c.cy - this.front(b, c.cx)) * fwd < 260)
+          .sort((p, q) => q.alive - p.alive)[0];
+        if (storm) {
+          const x = storm.cx;
+          const y = this.front(b, x);
+          if (b.countNear(this.side, x, y, 70) > 30 && !b.mageCan(m.id, "dome", x, y)) b.mageDome(m.id, x, y);
+        }
+      }
+      let best: Company | null = null;
+      let bestV = 40;
+      for (const c of foe) {
+        if (c.type === UNIT_MAGE || c.type === UNIT_GUN || c.alive < 25) continue;
+        if (Math.hypot(c.cx - m.cx, c.cy - m.cy) > 300) continue;
+        const v = c.alive * (c.order === "storm" ? 2 : 1) * (c.type === UNIT_MG ? 12 : 1) * (b.terrain.coverAt(c.cx, c.cy) < 0.4 ? 1.4 : 1);
+        if (v > bestV) {
+          bestV = v;
+          best = c;
+        }
+      }
+      if (best && !b.mageCan(m.id, "blast", best.cx, best.cy)) {
+        // nicht auf eigene Leute
+        if (!b.companies.some((c) => c.side === this.side && c.alive > 0 && c.type !== UNIT_MAGE && Math.hypot(c.cx - best.cx, c.cy - best.cy) < 50)) b.mageBlast(m.id, best.cx, best.cy);
+      }
+    }
+  }
+
   /** Liegen keine eigenen Leute im Umkreis? (kein Beschuss der eigenen Truppe) */
   private clearOfOwn(b: Battle, x: number, y: number, r: number) {
     return !b.companies.some((c) => c.side === this.side && c.alive > 0 && c.type !== UNIT_MAGE && Math.hypot(c.cx - x, c.cy - y) < r);
@@ -555,6 +611,8 @@ export class BattleAI {
     return this.startAttack(b, own, lane, true);
   }
 
+  /** Befehl für die Magier: selbstständig, Luftschutz, Sturm begleiten oder Jagd */
+  mageOrder: "auto" | "cover" | "escort" | "hunt" = "auto";
   /** Generalangriff läuft bis zu diesem Zeitpunkt */
   generalUntil = -1;
 
@@ -680,7 +738,7 @@ export class BattleAI {
   }
 
   private mages(b: Battle, own: Company[], foe: Company[]) {
-    if (this.stances.every((s) => s === "hold") && !this.attack) return;
+    if (this.stances.every((s) => s === "hold") && !this.attack && this.mageOrder === "auto") return;
     if (this.veteran) {
       this.veteranMages(b, own, foe);
       return;
@@ -712,6 +770,8 @@ export class BattleAI {
     const atHome = (m: Company) => Math.hypot(m.cx - m.homeX, m.cy - m.homeY) < 60;
     const all = own.filter((m) => m.type === UNIT_MAGE && m.order !== "retreat");
     if (all.length === 0) return;
+    this.mageAbilities(b, all, foe);
+    const order = this.mageOrder;
     const home = () => {
       for (const m of all) if (!atHome(m)) b.orderRetreat(m.id);
     };
@@ -723,14 +783,8 @@ export class BattleAI {
       return;
     }
     // 2. Luftschutz über dem eigenen Sturm oder frisch genommenen Einbruch
-    const a = this.attack;
-    const focus =
-      a && (a.stage === "storm" || a.stage === "smoke")
-        ? { x: a.breach, y: b.terrain.frontY(1 - this.side, a.breach) }
-        : this.held && this.held.until > b.time
-          ? this.held
-          : null;
-    if (focus) {
+    const focus = this.stormFocus(b);
+    if (focus && order !== "cover") {
       const near = (c: Company) => Math.hypot(c.cx - focus.x, c.cy - focus.y) < 350;
       const threat =
         foe.filter((c) => c.type === UNIT_MAGE && near(c)).sort((p, q) => q.alive - p.alive)[0] ??
@@ -749,8 +803,11 @@ export class BattleAI {
     const foeMages = foe.filter((c) => c.type === UNIT_MAGE);
     const foeReady = foeMages.filter((c) => c.order !== "retreat" && c.mana > 30).reduce((n, c) => n + c.alive, 0);
     const ours = squads.reduce((n, c) => n + c.alive, 0);
-    const airOk = foeReady <= ours * 0.6;
-    if (squads.length === 0 || squads.some((m) => atHome(m) && m.mana < 85)) {
+    // Luftschutz und Begleitschutz (ohne laufenden Sturm): nur Nahverteidigung über der eigenen Stellung.
+    // Jagd: raus, auch ohne Luftüberlegenheit.
+    // Jagd nimmt auch ungefähr gleich starke feindliche Magier in Kauf, selbstständig nur mit klarer Überlegenheit
+    const airOk = order === "hunt" ? foeReady <= ours * 1.1 : order === "auto" && foeReady <= ours * 0.6;
+    if (squads.length === 0 || squads.some((m) => atHome(m) && m.mana < (order === "hunt" ? 45 : 85))) {
       home();
       return;
     }
@@ -767,16 +824,17 @@ export class BattleAI {
       squads.forEach((m, k) => b.orderMove(m.id, close.cx + (k - (squads.length - 1) / 2) * 30, y));
       return;
     }
-    // nur was außerhalb der Reichweite der feindlichen Grabenbesatzung liegt
+    // nur was außerhalb der Reichweite der feindlichen Grabenbesatzung liegt – auf der Jagd auch MG-Nester im Graben
+    const reach = order === "hunt" ? -60 : -150;
     const target = foe
-      .filter((c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN && ahead(c) < gap(c.cx) - 150)
+      .filter((c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN && ahead(c) < gap(c.cx) + reach)
       .sort((p, q) => score(b, q) - score(b, p) + (this.attack ? (Math.abs(p.cx - this.attack.breach) - Math.abs(q.cx - this.attack.breach)) / 10 : 0))[0];
     if (!target) {
       home();
       return;
     }
     // Nicht bis an den feindlichen Graben: dort warten MGs und die ganze Besatzung
-    const maxY = this.front(b, target.cx) + fwd * (gap(target.cx) - 260);
+    const maxY = this.front(b, target.cx) + fwd * (gap(target.cx) - (order === "hunt" ? 170 : 260));
     const ty = fwd > 0 ? Math.min(target.cy, maxY) : Math.max(target.cy, maxY);
     squads.forEach((m, k) => b.orderMove(m.id, target.cx + (k - (squads.length - 1) / 2) * 30, ty));
   }

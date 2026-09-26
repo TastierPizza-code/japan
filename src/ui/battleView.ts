@@ -10,7 +10,7 @@ import { STANCE_NAMES, type World } from "../world/world.ts";
 import { bindGestures, watchSize } from "./gestures.ts";
 import { Overlay, shortName } from "./overlay.ts";
 
-type Mode = "none" | "storm" | "arty" | "smoke" | "gas" | "plan";
+type Mode = "none" | "arty" | "smoke" | "gas" | "plan" | "blast" | "dome";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -107,9 +107,7 @@ export class BattleView {
     this.cam.fit();
     const campaign = !!ctx.world;
     $("#reserve").hidden = campaign;
-    $("#officerBtn").hidden = !ctx.officer;
     // Du führst die Magier, alles andere führen die Offiziere
-    $('[data-order="storm"]').hidden = true;
     for (const c of ctx.battle.companies) if (c.side === PLAYER && !commandable(c)) c.manual = false;
     $("#orders").hidden = ctx.spectator;
     $("#support").hidden = ctx.spectator;
@@ -241,7 +239,6 @@ export class BattleView {
     const c = this.battle.companies[id];
     if (!c || c.side !== PLAYER || c.alive <= 0 || this.ctx?.spectator) id = -1;
     this.selected = this.selected === id ? -1 : id;
-    if (this.mode === "storm") this.setMode("none");
     this.hud();
   }
 
@@ -255,6 +252,21 @@ export class BattleView {
       this.hud();
       return;
     }
+    if (this.mode === "blast" || this.mode === "dome") {
+      const kind = this.mode === "blast" ? "blast" : "dome";
+      // Die ausgewählte Staffel, sonst die nächste, die es jetzt kann
+      const mages = b.companies
+        .filter((c) => c.side === PLAYER && c.type === UNIT_MAGE && c.alive > 0)
+        .sort((p, q) => (p.id === this.selected ? -1 : q.id === this.selected ? 1 : Math.hypot(p.cx - w.x, p.cy - w.y) - Math.hypot(q.cx - w.x, q.cy - w.y)));
+      const caster = mages.find((c) => !b.mageCan(c.id, kind, w.x, w.y));
+      if (caster) {
+        if (kind === "blast") b.mageBlast(caster.id, w.x, w.y);
+        else b.mageDome(caster.id, w.x, w.y);
+        this.setMode("none");
+      } else $("#modetext").textContent = mages.length ? `Geht nicht: ${b.mageCan(mages[0].id, kind, w.x, w.y)}` : "Keine Magier mehr";
+      this.hud();
+      return;
+    }
     if (this.mode === "arty" || this.mode === "smoke" || this.mode === "gas") {
       if (!b.inArtyRange(PLAYER, w.x, w.y)) $("#modetext").textContent = "Außer Reichweite – die Geschütze reichen nur bis zum feindlichen vorderen Graben";
       else if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "arty" ? "he" : this.mode)) this.setMode("none");
@@ -263,14 +275,9 @@ export class BattleView {
     }
     const sel = b.companies[this.selected];
     if (sel && sel.alive > 0 && commandable(sel)) {
+      // Direkt führen: die Staffel fliegt dorthin und kämpft (bis du ihr wieder einen Befehl gibst)
       sel.manual = true;
-      if (this.mode === "storm") {
-        b.orderStorm(sel.id, w.x, w.y);
-        b.signal(sel.cx, sel.cy, 0);
-        this.setMode("none");
-      } else {
-        b.orderMove(sel.id, w.x, w.y);
-      }
+      b.orderMove(sel.id, w.x, w.y);
       this.hud();
       return;
     }
@@ -289,19 +296,23 @@ export class BattleView {
     if (best) this.select(best.id);
   }
 
+  /** Befehle für die Magier – gelten für alle Staffeln */
   order(kind: string) {
-    if (!this.ctx || this.selected < 0) return;
+    if (!this.ctx || this.ctx.spectator) return;
     const b = this.battle;
-    const c = b.companies[this.selected];
-    if (!commandable(c)) return;
-    if (kind === "officer") {
-      c.manual = false;
-    } else if (kind === "storm") {
-      this.setMode(this.mode === "storm" ? "none" : "storm");
-    } else {
-      c.manual = true;
-      if (kind === "hold") b.orderHold(this.selected);
-      else if (kind === "retreat") b.orderRetreat(this.selected);
+    const mages = b.companies.filter((c) => c.side === PLAYER && c.type === UNIT_MAGE && c.alive > 0);
+    if (mages.length === 0) return;
+    const off = this.ctx.officer;
+    if (kind === "cover" || kind === "escort" || kind === "hunt") {
+      if (off) off.mageOrder = kind;
+      for (const m of mages) m.manual = false;
+    } else if (kind === "blast" || kind === "dome") {
+      this.setMode(this.mode === kind ? "none" : kind);
+    } else if (kind === "retreat") {
+      for (const m of mages) {
+        m.manual = true;
+        b.orderRetreat(m.id);
+      }
     }
     this.hud();
   }
@@ -318,23 +329,28 @@ export class BattleView {
           ? "Gas: Ziel antippen – gut gegen Reserven und Batterien, treibt nach rechts"
         : m === "smoke"
           ? "Nebel: auf den feindlichen Graben legen, dann stürmen (treibt mit dem Wind nach rechts)"
-          : m === "storm"
-            ? "Sturmangriff: Ziel antippen"
-            : "";
+          : m === "blast"
+            ? "Sprengzauber: Stelle antippen (bis 160 m von den Magiern)"
+            : m === "dome"
+              ? "Schutzkuppel: über eigene Truppen legen (bis 160 m von den Magiern)"
+              : "";
     $("#arty").classList.toggle("on", m === "arty");
     $("#smokeBtn").classList.toggle("on", m === "smoke");
     $("#gasBtn").classList.toggle("on", m === "gas");
     $("#planBtn").classList.toggle("on", m === "plan");
-    $('[data-order="storm"]').classList.toggle("on", m === "storm");
+    $('[data-order="blast"]').classList.toggle("on", m === "blast");
+    $('[data-order="dome"]').classList.toggle("on", m === "dome");
   }
 
   key(e: KeyboardEvent): boolean {
     if (!this.ctx) return false;
     const k = e.key.toLowerCase();
-    if (k === "h") this.order("hold");
-    else if (k === "s") this.order("storm");
+    if (k === "l") this.order("cover");
+    else if (k === "b") this.order("escort");
+    else if (k === "j") this.order("hunt");
+    else if (k === "z") this.order("blast");
+    else if (k === "x") this.order("dome");
     else if (k === "r") this.order("retreat");
-    else if (k === "o") this.order("officer");
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
     else if (k === "n") this.setMode(this.mode === "smoke" ? "none" : "smoke");
     else if (k === "g") this.generalButton();
@@ -443,7 +459,7 @@ export class BattleView {
     const genLeft = this.ctx.officer ? this.ctx.officer.generalUntil - b.time : 0;
     gen.hidden = !this.ctx.officer;
     gen.disabled = genLeft > 0;
-    gen.textContent = genLeft > 0 ? `Generalangriff · ${Math.ceil(genLeft)}s` : "Generalangriff";
+    gen.textContent = genLeft > 0 ? `General\u00ADangriff · ${Math.ceil(genLeft)}s` : "General\u00ADangriff";
     const plan = $<HTMLButtonElement>("#planBtn");
     const status = this.ctx.officer?.attackStatus();
     plan.hidden = !this.ctx.officer;
@@ -465,14 +481,29 @@ export class BattleView {
     const sel = b.companies[this.selected];
     if (sel && sel.alive <= 0) this.selected = -1;
     const hasSel = this.selected >= 0;
+    // Magier-Befehle: gelten für alle Staffeln; aktiver Befehl leuchtet, Fähigkeiten zeigen ihre Abklingzeit
+    const mages = b.companies.filter((c) => c.side === PLAYER && c.type === UNIT_MAGE && c.alive > 0);
+    const off = this.ctx.officer;
+    const auto = mages.some((m) => !m.manual);
+    const ready = (f: (m: Company) => number) => Math.min(...mages.map((m) => Math.max(0, f(m) - b.time)));
     document.querySelectorAll<HTMLButtonElement>("#orders button").forEach((btn) => {
-      btn.disabled = !hasSel || !commandable(sel) || sel.order === "rout" || (btn.dataset.order === "officer" && !sel.manual);
+      const k = btn.dataset.order!;
+      btn.disabled = mages.length === 0 || !!this.ctx?.spectator;
+      if (k === "cover" || k === "escort" || k === "hunt") btn.classList.toggle("on", auto && off?.mageOrder === k);
+      if (k === "blast" || k === "dome") {
+        const left = mages.length ? ready((m) => (k === "blast" ? m.blastReady : m.domeReady)) : 0;
+        btn.textContent = (k === "blast" ? "Sprengzauber" : "Kuppel") + (left > 0 ? ` · ${Math.ceil(left)}s` : "");
+      }
     });
     $("#selinfo").innerHTML = this.ctx.spectator
       ? "Fremde Schlacht – du schaust nur zu."
       : hasSel
         ? this.describe(sel)
-        : "Du führst die Magier ✦: antippen, dann Ziel antippen. Die Kompanien führen deine Offiziere – gib ihnen Haltungen und Befehle.";
+        : mages.length
+          ? `Deine Magier ✦ ${mages.map((m) => `${m.alive}/${m.initial} ${meterBar(m.mana, "#7ff0ff")}`).join(" ")} · ${
+              mages.every((m) => m.manual) ? "von dir geführt" : { auto: "selbstständig", cover: "Luftschutz", escort: "begleiten", hunt: "auf Jagd" }[off?.mageOrder ?? "auto"]
+            }<br><small>Befehl wählen oder Magier antippen und direkt führen. Die Kompanien führen deine Offiziere.</small>`
+          : "Deine Magier sind gefallen. Die Kompanien führen deine Offiziere.";
 
     for (const c of b.companies) {
       if (c.side !== PLAYER) continue;
@@ -496,8 +527,7 @@ export class BattleView {
   }
 
   private describe(c: Company) {
-    const bar = (v: number, col: string) =>
-      `<span class="meter"><i style="width:${Math.max(0, v)}%;background:${col}"></i></span>`;
+    const bar = meterBar;
     const b = this.battle;
     const st = STATS[c.type];
     const range = `Reichweite ${Math.round(st.range * METERS_PER_UNIT)} m`;
@@ -509,9 +539,7 @@ export class BattleView {
       second = `Zustand ${hp.map((h) => `${h}%`).join(" / ")}${ready} · ${range}`;
     } else second = `Moral ${bar(c.morale, moraleColor(c))} · ${orderText(c, b)} · ${range}`;
     const hint =
-      this.mode === "storm"
-        ? ""
-        : c.order === "rout"
+      c.order === "rout"
           ? " · <b>flieht, sammelt sich hinten</b>"
           : c.manual
             ? " · <b>von dir geführt</b>"
@@ -554,4 +582,8 @@ export function fmt(n: number) {
 /** Was der Spieler selbst führt: die Magier. Alles andere führen die Offiziere. */
 function commandable(c: Company) {
   return c.type === UNIT_MAGE;
+}
+
+function meterBar(v: number, col: string) {
+  return `<span class="meter"><i style="width:${Math.max(0, v)}%;background:${col}"></i></span>`;
 }

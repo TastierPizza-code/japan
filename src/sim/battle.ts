@@ -33,6 +33,18 @@ import {
   MINE_TANK_DAMAGE,
   MINE_TRIGGER,
   MORALE_PER_LOSS,
+  MG_ANTI_MAGE,
+  MAGE_MANA_REGEN_OWN,
+  MAGE_SHIELD_DELAY,
+  MAGE_BLAST_MANA,
+  MAGE_BLAST_COOLDOWN,
+  MAGE_BLAST_RADIUS,
+  MAGE_ABILITY_RANGE,
+  MAGE_DOME_MANA,
+  MAGE_DOME_COOLDOWN,
+  MAGE_DOME_RADIUS,
+  MAGE_DOME_DURATION,
+  MAGE_DOME_FACTOR,
   ARTY_DEPTH,
   ODDS_RADIUS,
   RUNNING_TARGET,
@@ -102,6 +114,9 @@ export interface Company {
   cy: number;
   lastLoss: number;
   mana: number;
+  /** Magier: ab wann Sprengzauber und Schutzkuppel wieder bereit sind */
+  blastReady: number;
+  domeReady: number;
   /** Division der Kampagne, aus der die Kompanie stammt (-1 = keine) */
   division: number;
   /** Spieler hat direkt befohlen → KI-Offizier lässt die Kompanie in Ruhe */
@@ -259,6 +274,10 @@ export class Battle {
   barrages: Barrage[] = [];
   shells: Shell[] = [];
   smokes: Smoke[] = [];
+  /** Schutzkuppeln der Magier */
+  domes: { x: number; y: number; r: number; side: number; t0: number; until: number }[] = [];
+  /** Wann ein Soldat zuletzt getroffen wurde (für den Magierschild) */
+  lastHit = new Float32Array(MAX_UNITS);
   fires: Fire[] = [];
   /** Wann hat die Artillerie einer Seite zuletzt gefeuert (verrät ihre Stellung) */
   lastGunfire = [-100, -100];
@@ -482,6 +501,7 @@ export class Battle {
     this.updateMines(dt);
     this.updateFires(dt);
     this.updateSmoke(dt);
+    if (this.domes.length > 0) this.domes = this.domes.filter((d) => d.until > this.time);
     this.updateSides(dt);
     this.updateObjectives(dt);
     if (!this.campaign && Math.floor(this.time) !== Math.floor(this.time - dt)) this.checkVictory();
@@ -586,7 +606,7 @@ export class Battle {
 
       this.suppress[i] = Math.max(0, this.suppress[i] - 0.1 * dt);
       this.reload2[i] -= dt;
-      if (isMage) this.hp[i] = Math.min(st.hp, this.hp[i] + MAGE_SHIELD_REGEN * dt);
+      if (isMage && this.time - this.lastHit[i] > MAGE_SHIELD_DELAY) this.hp[i] = Math.min(st.hp, this.hp[i] + MAGE_SHIELD_REGEN * dt);
 
       // --- Zielauswahl (nicht jeden Tick, das spart viel Rechenzeit)
       this.think[i] -= dt;
@@ -749,7 +769,9 @@ export class Battle {
     const tType = this.type[t];
     const sight = this.alongTrench(i, t) ? 0.05 : this.sight(i, t);
     let p = baseHit * (1 - (st.falloff ?? 0.75) * (dist / st.range)) * (1 - 0.6 * this.suppress[i]) * sight;
-    if (tType === UNIT_MAGE) p *= MAGE_EVASION * (this.type[i] === UNIT_MG ? 1.6 : 1);
+    if (tType === UNIT_MAGE) p *= MAGE_EVASION * (this.type[i] === UNIT_MG ? MG_ANTI_MAGE : 1);
+    // Schutzkuppel eines Magiers über dem Ziel: Kugeln prallen größtenteils ab
+    else if (this.domes.length > 0 && this.underDome(t, i)) p *= MAGE_DOME_FACTOR;
     else {
       let cover = this.terrain.coverAt(this.x[t], this.y[t]);
       // Von der Seite geschossen: Trichterrand, Ruine oder Wrack schützen nur nach vorn.
@@ -816,7 +838,7 @@ export class Battle {
     const ground = this.grids[enemy].nearest(x, y, range, this.x, this.y, inTrench ? (id) => !this.alongTrench(i, id) : undefined);
     // Flugabwehr gab es kaum: Magier werden nur beschossen, wenn sie nah sind
     if (type === UNIT_RIFLE || type === UNIT_MG) {
-      const m = nearestOf(this.unitsOf(enemy, UNIT_MAGE), Math.min(range, 200));
+      const m = nearestOf(this.unitsOf(enemy, UNIT_MAGE), Math.min(range, 260));
       if (m >= 0 && (ground < 0 || Math.hypot(this.x[m] - x, this.y[m] - y) < this.grids[enemy].lastDist)) return m;
     }
     return ground;
@@ -975,6 +997,70 @@ export class Battle {
     this.suppress[id] = Math.min(1, this.suppress[id] + amount * nerve);
   }
 
+  // ------------------------------------------------------------ Magier-Fähigkeiten
+
+  /** Steht Soldat t unter einer Kuppel seiner Seite, und schießt i von außerhalb? */
+  private underDome(t: number, i: number): boolean {
+    for (const d of this.domes) {
+      if (d.side !== this.side[t]) continue;
+      const r2 = d.r * d.r;
+      if ((this.x[t] - d.x) ** 2 + (this.y[t] - d.y) ** 2 < r2 && (this.x[i] - d.x) ** 2 + (this.y[i] - d.y) ** 2 >= r2) return true;
+    }
+    return false;
+  }
+
+  /** Kann die Magierstaffel die Fähigkeit jetzt dort einsetzen? Gibt sonst den Grund zurück. */
+  mageCan(companyId: number, kind: "blast" | "dome", x: number, y: number): string | null {
+    const c = this.companies[companyId];
+    if (!c || c.type !== UNIT_MAGE || c.alive <= 0) return "Keine Magier";
+    if ((kind === "blast" ? c.blastReady : c.domeReady) > this.time) return `Noch ${Math.ceil((kind === "blast" ? c.blastReady : c.domeReady) - this.time)} s`;
+    if (c.mana < (kind === "blast" ? MAGE_BLAST_MANA : MAGE_DOME_MANA)) return "Zu wenig Mana";
+    if (Math.hypot(x - c.cx, y - c.cy) > MAGE_ABILITY_RANGE) return "Zu weit weg von den Magiern";
+    return null;
+  }
+
+  /** Sprengzauber: eine große Explosion – trifft auch in Gräben, Magie kennt keine Brustwehr */
+  mageBlast(companyId: number, x: number, y: number): boolean {
+    if (this.mageCan(companyId, "blast", x, y)) return false;
+    const c = this.companies[companyId];
+    c.mana -= MAGE_BLAST_MANA;
+    c.blastReady = this.time + MAGE_BLAST_COOLDOWN;
+    this.by(c.side, C_MAGIC);
+    const R = MAGE_BLAST_RADIUS;
+    this.events.blasts.push(x, y, R, 1);
+    this.events.blasts.push(x, y, R * 0.6, 0);
+    for (let s = 0; s < 2; s++) {
+      if (s === c.side) continue;
+      this.grids[s].forEachInRadius(x, y, R * 1.8, this.x, this.y, (id, d) => {
+        if (!this.alive[id]) return;
+        this.pin(id, 0.9 * (1 - d / (R * 1.8)));
+        if (d > R) return;
+        const type = this.type[id];
+        if (STATS[type].armored) {
+          this.damage(id, 14 * (1 - d / R), 0);
+          return;
+        }
+        const cover = this.terrain.coverAt(this.x[id], this.y[id]);
+        const p = 0.7 * (1 - cover * 0.6) * (1 - (d / R) * 0.5);
+        if (this.rng.next() < p) this.damage(id, type === UNIT_MG ? 2 : 1, Math.atan2(this.y[id] - y, this.x[id] - x));
+      });
+    }
+    this.terrain.addCrater(x, y, 9);
+    this.events.craters.push(x, y, 9);
+    return true;
+  }
+
+  /** Schutzkuppel über eigenen Truppen: Kugeln und Splitter prallen größtenteils ab */
+  mageDome(companyId: number, x: number, y: number): boolean {
+    if (this.mageCan(companyId, "dome", x, y)) return false;
+    const c = this.companies[companyId];
+    c.mana -= MAGE_DOME_MANA;
+    c.domeReady = this.time + MAGE_DOME_COOLDOWN;
+    this.domes.push({ x, y, r: MAGE_DOME_RADIUS, side: c.side, t0: this.time, until: this.time + MAGE_DOME_DURATION });
+    this.events.blasts.push(x, y, 10, 1);
+    return true;
+  }
+
   /** Wie viele Soldaten (ohne Magier) einer Seite stehen im Umkreis? */
   countNear(side: number, x: number, y: number, r: number): number {
     let n = 0;
@@ -1089,6 +1175,7 @@ export class Battle {
   private damage(id: number, amount: number, angle: number) {
     if (!this.alive[id]) return;
     this.hp[id] -= amount;
+    this.lastHit[id] = this.time;
     if (this.hp[id] > 0) return;
     this.alive[id] = 0;
     this.release(id);
@@ -1161,7 +1248,10 @@ export class Battle {
 
       if (c.type === UNIT_MAGE) {
         const atHome = Math.hypot(c.cx - c.homeX, c.cy - c.homeY) < 60;
+        // über (oder hinter) der eigenen Stellung lädt es langsam nach, draußen zehrt der Einsatz
+        const overOwn = (c.cy - this.terrain.frontY(c.side, c.cx)) * FORWARD[c.side] < 40;
         if (atHome) c.mana = Math.min(MAGE_MANA_MAX, c.mana + MAGE_MANA_REGEN * dt);
+        else if (overOwn) c.mana = Math.min(MAGE_MANA_MAX, c.mana + (MAGE_MANA_REGEN_OWN - MAGE_MANA_DRAIN) * dt);
         else c.mana = Math.max(0, c.mana - MAGE_MANA_DRAIN * dt);
         if (!atHome && c.mana < 12 && c.order !== "retreat") this.setTarget(c, c.homeX, c.homeY, "retreat");
         if (atHome && c.order === "retreat") c.order = "advance";
@@ -1269,7 +1359,8 @@ export class Battle {
         }
         const cover = this.terrain.coverAt(this.x[id], this.y[id]);
         // Im Graben oder Bunker hält Artillerie vor allem nieder – tödlich ist sie im Freien
-        const p = 0.85 * (1 - cover) ** 2 * (1 - (d / radius) * 0.5);
+        let p = 0.85 * (1 - cover) ** 2 * (1 - (d / radius) * 0.5);
+        if (this.domes.length > 0 && this.domes.some((dm) => dm.side === this.side[id] && (this.x[id] - dm.x) ** 2 + (this.y[id] - dm.y) ** 2 < dm.r * dm.r)) p *= 0.5;
         if (this.rng.next() < p) this.damage(id, type === UNIT_GUN ? 3 : type === UNIT_MG ? 2 : 1, Math.atan2(this.y[id] - y, this.x[id] - x));
       });
     }
@@ -1452,6 +1543,8 @@ export class Battle {
       cy: y,
       lastLoss: -100,
       mana: MAGE_MANA_MAX,
+      blastReady: 0,
+      domeReady: 0,
       division: -1,
       manual: false,
       readyAt: 0,
