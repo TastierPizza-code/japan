@@ -19,7 +19,7 @@ class App {
   campaign: CampaignView | null = null;
   battleView = new BattleView();
   /** Schnelles Gefecht ohne Kampagne */
-  skirmish: { battle: Battle; ai: BattleAI; shown: boolean } | null = null;
+  skirmish: { battle: Battle; ais: BattleAI[]; shown: boolean } | null = null;
   view: "map" | "battle" | "menu" = "menu";
   paused = true;
   speed = 1;
@@ -100,11 +100,23 @@ class App {
     const d = $("#dialog");
     d.innerHTML = `<div class="card">
       <h1>Schnelles Gefecht</h1>
-      <h2>Beide Seiten mit Infanterie, MGs, Tankgewehren, Flammenwerfern, Panzern, einer Batterie Feldgeschütze und Magiern.</h2>
+      <h2>Beide Seiten mit Infanterie, MGs, Tankgewehren, Flammenwerfern, Panzern, Feldgeschützen und Magiern.</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button id="optBig" class="${this.skBig ? "on" : ""}">Großschlacht (~8.000 Mann)</button>
+        <button id="optWatch" class="${this.skWatch ? "on" : ""}">Zuschauen (KI gegen KI)</button>
+      </div>
       <div class="list">${BIOMES.map((b) => `<button class="rowbtn" data-biome="${b}"><span>${BIOME_NAMES[b]}</span></button>`).join("")}
         <button class="rowbtn primary" data-biome="random"><span>Zufällige Landschaft</span></button>
       </div>
       <button id="menuBack" class="wide">Zurück</button></div>`;
+    $("#optBig").addEventListener("click", () => {
+      this.skBig = !this.skBig;
+      this.skirmishMenu();
+    });
+    $("#optWatch").addEventListener("click", () => {
+      this.skWatch = !this.skWatch;
+      this.skirmishMenu();
+    });
     d.querySelectorAll<HTMLButtonElement>("[data-biome]").forEach((b) =>
       b.addEventListener("click", () => this.startSkirmish(b.dataset.biome === "random" ? undefined : (b.dataset.biome as Biome))),
     );
@@ -126,11 +138,16 @@ class App {
     this.setSpeed(1);
   }
 
+  skBig = false;
+  skWatch = false;
+
   startSkirmish(biome?: Biome) {
     $("#dialog").hidden = true;
-    const battle = new Battle((Math.random() * 1e9) | 0, { biome });
-    this.skirmish = { battle, ai: new BattleAI(ENEMY), shown: false };
-    this.battleView.open({ battle, spectator: false });
+    const battle = new Battle((Math.random() * 1e9) | 0, { biome, big: this.skBig });
+    const ais = [new BattleAI(ENEMY)];
+    if (this.skWatch) ais.push(new BattleAI(PLAYER));
+    this.skirmish = { battle, ais, shown: false };
+    this.battleView.open({ battle, spectator: this.skWatch });
     this.view = "battle";
     this.toast(this.battleView.biomeName(), "info");
     this.setSpeed(1);
@@ -203,7 +220,7 @@ class App {
     } else if (this.skirmish) {
       const s = this.skirmish;
       if (!s.battle.result) {
-        s.ai.update(s.battle, TICK);
+        for (const ai of s.ais) ai.update(s.battle, TICK);
         s.battle.update(TICK);
       }
     }

@@ -171,10 +171,11 @@ export class BattleAI {
         return;
       }
       const lane = LANES[best];
-      const infantry = own
+      const candidates = own
         .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 60 && Math.abs(c.cx - lane) < 300)
-        .sort((a, c) => c.alive - a.alive)
-        .slice(0, 2);
+        .sort((a, c) => c.alive - a.alive);
+      // In großen Schlachten greifen mehr Kompanien gemeinsam an; ein Teil hält immer den Graben
+      const infantry = candidates.slice(0, Math.max(2, Math.floor(candidates.length / 2)));
       if (infantry.length === 0) {
         this.attackWait = 30;
         return;

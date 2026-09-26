@@ -245,7 +245,7 @@ export class Battle {
   private pending: PendingShot[] = [];
   private mineTimer = 0;
 
-  constructor(seed = 1, opts: { campaign?: boolean; biome?: Biome } = {}) {
+  constructor(seed = 1, opts: { campaign?: boolean; biome?: Biome; big?: boolean } = {}) {
     this.rng = new Rng(seed);
     this.terrain = new Terrain(this.rng, opts.biome);
     this.campaign = opts.campaign ?? false;
@@ -255,7 +255,40 @@ export class Battle {
         this.objectives.push({ x, y: this.terrain.frontY(s, x), owner: s, capture: 0, capturer: -1 });
       }
     }
-    if (!this.campaign) this.deployDefault();
+    if (!this.campaign) {
+      if (opts.big) this.deployBig();
+      else this.deployDefault();
+    }
+  }
+
+  /** Großschlacht: rund 4.000 Mann je Seite mit allen Waffengattungen */
+  private deployBig() {
+    const t = this.terrain;
+    const xs = [160, 480, 800, 1120, 1440];
+    for (let s = 0; s < 2; s++) {
+      const n = (i: number) => (s === 0 ? `${i}. Kompanie` : `${i}e Cie`);
+      let k = 1;
+      for (const x of xs) this.createCompany(s, UNIT_RIFLE, n(k++), x, t.frontY(s, x), 280);
+      for (const x of xs) this.createCompany(s, UNIT_RIFLE, n(k++), x, t.supportY(s, x), 280);
+      for (const x of [300, 650, 950, 1300]) {
+        const y = (t.supportY(s, x) + GUN_Y[s]) / 2 - FORWARD[s] * 20;
+        this.createCompany(s, UNIT_RIFLE, n(k++), x, y, 280);
+      }
+      const spots = this.mgSpots(s);
+      for (let i = 0; i < 4; i++) {
+        const sp = spots[i % spots.length];
+        this.createCompany(s, UNIT_MG, s === 0 ? `MG-Zug ${"ABCD"[i]}` : `Mitrailleuses ${"ABCD"[i]}`, sp.x + Math.floor(i / spots.length) * 60, sp.y, MG_PER_SECTION);
+      }
+      for (const x of [560, 1040]) this.createCompany(s, UNIT_AT, s === 0 ? "Tankgewehr-Trupp" : "Fusils antichar", x, t.frontY(s, x), AT_PER_SQUAD);
+      for (const x of [400, 1200]) this.createCompany(s, UNIT_FLAME, s === 0 ? "Flammenwerfer" : "Lance-flammes", x, t.supportY(s, x), FLAME_PER_SQUAD);
+      for (const x of [500, 1100]) {
+        const y = (t.supportY(s, x) + GUN_Y[s]) / 2 + FORWARD[s] * 10;
+        this.createCompany(s, UNIT_TANK, s === 0 ? "Panzerzug" : "Chars d'assaut", x, y, TANKS_PER_PLATOON);
+      }
+      [400, 800, 1200].forEach((x, i) => this.createCompany(s, UNIT_GUN, s === 0 ? `${i + 1}. Batterie` : `${i + 1}e Batterie`, x, GUN_Y[s], GUNS_PER_BATTERY));
+      for (const x of [500, 1100]) this.createCompany(s, UNIT_MAGE, s === 0 ? "Magier „Sturmvogel“" : "Mages „Corbeau“", x, REAR_Y[s], MAGES_PER_SQUAD);
+    }
+    for (let s = 0; s < 2; s++) this.sides[s].initialStrength = this.groundStrength(s);
   }
 
   private deployDefault() {

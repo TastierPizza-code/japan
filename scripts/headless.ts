@@ -7,8 +7,9 @@ import { TICK } from "../src/sim/config.ts";
 
 const seed = Number(process.argv[2] ?? 1);
 const maxMinutes = Number(process.argv[3] ?? 40);
+const big = process.argv.includes("--gross");
 
-const b = new Battle(seed);
+const b = new Battle(seed, { big });
 const ais = [new BattleAI(0), new BattleAI(1)];
 const t0 = performance.now();
 let ticks = 0;
