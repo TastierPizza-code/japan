@@ -392,6 +392,8 @@ export class BattleAI {
         a.stage = "storm";
         a.timer = 0;
         this.report(`Sturm ${LANE_NAMES[laneOf(a.breach)]}!`, "info", a.breach, enemyFront(a.breach));
+        // Trillerpfeifen entlang der Ausgangsstellung
+        for (const dx of [-120, 0, 120]) b.signal(a.breach + dx, jumpY(a.breach + dx), 0);
       }
     } else if (a.stage === "storm") {
       // Feuerwalze: solange die eigenen Leute noch weit genug weg sind, weiter auf den Graben schießen

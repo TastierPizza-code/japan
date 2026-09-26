@@ -1,7 +1,7 @@
 // Schlachtgeräusche, komplett synthetisch (WebAudio) – keine Audiodateien nötig.
 // Browser erlauben Ton erst nach einer Nutzeraktion: unlock() beim ersten Klick aufrufen.
 
-type Kind = "rifle" | "mg" | "at" | "gun" | "boom" | "mine" | "cannonHit" | "whistle" | "flame" | "magic" | "magicBoom" | "grenade" | "smokePop";
+type Kind = "rifle" | "mg" | "at" | "gun" | "boom" | "mine" | "cannonHit" | "whistle" | "flame" | "magic" | "magicBoom" | "grenade" | "smokePop" | "whistleSignal" | "gasAlarm";
 
 const MIN_GAP: Record<Kind, number> = {
   rifle: 0.025,
@@ -17,6 +17,8 @@ const MIN_GAP: Record<Kind, number> = {
   magicBoom: 0.08,
   grenade: 0.05,
   smokePop: 0.12,
+  whistleSignal: 0.15,
+  gasAlarm: 2,
 };
 
 export class BattleAudio {
@@ -142,6 +144,50 @@ export class BattleAudio {
         this.thump(out, now, 70, 0.2, 0.25 * vol);
         this.burst(out, now, 1.2, "highpass", 1200, 0.4, 0.12 * vol);
         break;
+      case "whistleSignal": {
+        // Trillerpfeife: hoher Ton mit schnellem Triller, zweimal kurz, einmal lang
+        const o = ctx.createOscillator();
+        const lfo = ctx.createOscillator();
+        const depth = ctx.createGain();
+        const g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.value = 2900 * jitter;
+        lfo.frequency.value = 28;
+        depth.gain.value = 180;
+        lfo.connect(depth).connect(o.frequency);
+        g.gain.setValueAtTime(0.0001, now);
+        for (const [t0, t1] of [[0, 0.18], [0.28, 0.46], [0.56, 1.3]]) {
+          g.gain.setValueAtTime(0.0001, now + t0);
+          g.gain.exponentialRampToValueAtTime(0.07 * vol, now + t0 + 0.03);
+          g.gain.setValueAtTime(0.07 * vol, now + t1 - 0.04);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + t1);
+        }
+        o.connect(g).connect(out);
+        o.start(now);
+        lfo.start(now);
+        o.stop(now + 1.35);
+        lfo.stop(now + 1.35);
+        break;
+      }
+      case "gasAlarm": {
+        // Gasalarm: auf eine Granathülse oder einen Gong geschlagen, mehrmals
+        for (let k = 0; k < 5; k++) {
+          const t = now + k * 0.32;
+          for (const f of [640, 1510, 2380]) {
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.type = "sine";
+            o.frequency.value = f * jitter;
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime((f === 640 ? 0.08 : 0.04) * vol, t + 0.005);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+            o.connect(g).connect(out);
+            o.start(t);
+            o.stop(t + 0.32);
+          }
+        }
+        break;
+      }
       case "magicBoom":
         this.thump(out, now, 120, 0.3, 0.4 * vol);
         this.burst(out, now, 0.3, "highpass", 2000, 0.5, 0.2 * vol);

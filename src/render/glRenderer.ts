@@ -249,6 +249,7 @@ export class GlRenderer {
       this.part(x, y, 0, 0, 0, { life: 0.4, s0: 6, s1: 40, c: [0.8, 0.75, 0.6, 0.35], mode: M_RING });
       this.onSound?.("gun", x, y);
     }
+    for (let i = 0; i < e.signals.length; i += 3) this.onSound?.(e.signals[i + 2] === 0 ? "whistleSignal" : "gasAlarm", e.signals[i], e.signals[i + 1]);
     for (let i = 0; i < e.flames.length; i += 3) {
       const [x, y, a] = [e.flames[i], e.flames[i + 1], e.flames[i + 2]];
       for (let j = 0; j < 5; j++) {

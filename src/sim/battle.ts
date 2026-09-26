@@ -190,7 +190,7 @@ export interface BattleEvents {
   hits: number[];
   /** x,y,side,type,angle */
   deaths: number[];
-  /** x,y,r,kind (0 Granate, 1 Magie, 2 Mine, 3 Kanone, 4 Panzer explodiert, 5 Flammentank, 6 Handgranate, 7 Nebelgranate) */
+  /** x,y,r,kind (0 Granate, 1 Magie, 2 Mine, 3 Kanone, 4 Panzer explodiert, 5 Flammentank, 6 Handgranate, 7 Nebelgranate, 8 Gasgranate) */
   blasts: number[];
   /** x,y,r */
   craters: number[];
@@ -202,6 +202,8 @@ export interface BattleEvents {
   tracks: number[];
   /** x,y,angle */
   wrecks: number[];
+  /** x,y,kind (0 Trillerpfeife zum Sturm, 1 Gasalarm) */
+  signals: number[];
 }
 
 export interface BattleResult {
@@ -262,6 +264,7 @@ export class Battle {
     flames: [],
     tracks: [],
     wrecks: [],
+    signals: [],
   };
   /** Gefallene (x, y, Seite, Typ, Winkel) – damit das Bild beim Öffnen wieder aufgebaut werden kann */
   corpses: number[] = [];
@@ -466,6 +469,12 @@ export class Battle {
     e.flames.length = 0;
     e.tracks.length = 0;
     e.wrecks.length = 0;
+    e.signals.length = 0;
+  }
+
+  /** Signal für Ton/Anzeige: 0 Trillerpfeife (Sturm), 1 Gasalarm */
+  signal(x: number, y: number, kind: number) {
+    this.events.signals.push(x, y, kind);
   }
 
   groundStrength(side: number): number {
@@ -1161,6 +1170,8 @@ export class Battle {
         this.events.blasts.push(s.tx, s.ty, 8, 7);
       } else if (s.kind === "gas") {
         this.smokes.push({ x: s.tx, y: s.ty, r: GAS_RADIUS, t0: this.time, until: this.time + GAS_DURATION, gas: true });
+        // Gasalarm: höchstens einmal je Salve (nicht für jede Granate)
+        if (!this.smokes.some((o) => o.gas && o !== this.smokes[this.smokes.length - 1] && this.time - o.t0 < 6 && Math.hypot(o.x - s.tx, o.y - s.ty) < 200)) this.signal(s.tx, s.ty, 1);
         this.events.blasts.push(s.tx, s.ty, 8, 8);
       } else if (s.kind === "grenade") this.grenadeImpact(s);
       else if (s.target >= 0 && this.alive[s.target] && Math.hypot(this.x[s.target] - s.tx, this.y[s.target] - s.ty) < 14) {

@@ -251,6 +251,7 @@ export class BattleView {
       sel.manual = true;
       if (this.mode === "storm") {
         b.orderStorm(sel.id, w.x, w.y);
+        b.signal(sel.cx, sel.cy, 0);
         this.setMode("none");
       } else {
         b.orderMove(sel.id, w.x, w.y);
