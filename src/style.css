@@ -185,6 +185,16 @@ body {
   font-family: Georgia, serif;
 }
 
+.cap.barr {
+  fill: #d8c9a0;
+  font-size: 11px;
+}
+
+.cap.rally {
+  fill: #ffd24a;
+  font-size: 18px;
+}
+
 .cap {
   fill: #f3e2a8;
   font-size: 12px;

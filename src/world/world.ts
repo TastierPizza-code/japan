@@ -53,7 +53,10 @@ export interface Nation {
   hungry: boolean;
   opinion: number[];
   allies: number[];
-  queue: { kind: UnitKind; left: number }[];
+  /** Ausbildung: prov = Kaserne, in der die Einheit gerade ausgebildet wird (-1 = wartet auf eine freie) */
+  queue: { kind: UnitKind; left: number; prov: number }[];
+  /** Sammelpunkt: frisch ausgebildete Einheiten marschieren zu diesem Frontpunkt */
+  rally: number | null;
   counter: Record<UnitKind, number>;
 }
 
@@ -159,10 +162,87 @@ export class World {
       opinion: new Array(n).fill(0),
       allies: [],
       queue: [],
+      rally: null,
       counter: { infantry: 0, mg: 0, artillery: 0, mage: 0, tank: 0, at: 0, flame: 0, storm: 0 },
     }));
     SCENARIO_1914(this);
+    this.placeBarracks();
     this.updateEconomy(0);
+  }
+
+  // ================================================================ Kasernen
+
+  /** Kasernen: feste Ausbildungsorte auf der Karte. Jede bildet eine Einheit gleichzeitig aus. */
+  barracks: number[] = [];
+
+  /**
+   * Je Nation: die Hauptstadt und weitere große Städte oder Industrieprovinzen, über das Land
+   * verteilt – eine Kaserne je 3 Städte/Industrieprovinzen (mindestens die Hauptstadt).
+   */
+  private placeBarracks() {
+    const km = this.map.kmPerPx;
+    for (const n of this.nations) {
+      const own = this.map.provinces.filter((p) => this.owner[p.id] === n.id);
+      const cand = own.filter((p) => (p.type === "stadt" || p.type === "industrie") && p.id !== n.capital).sort((a, b) => b.area - a.area);
+      // höchstens 8 – mehr lässt die Wirtschaft ohnehin nicht gleichzeitig bezahlen
+      const want = Math.min(8, Math.max(1, Math.floor((cand.length + (own.some((p) => p.id === n.capital) ? 1 : 0)) / 3)));
+      const chosen = [n.capital];
+      for (const minKm of [220, 120, 0]) {
+        for (const p of cand) {
+          if (chosen.length >= want) break;
+          if (chosen.includes(p.id)) continue;
+          const far = chosen.every((c) => Math.hypot(this.map.provinces[c].x - p.x, this.map.provinces[c].y - p.y) * km >= minKm);
+          if (far) chosen.push(p.id);
+        }
+      }
+      this.barracks.push(...chosen);
+    }
+  }
+
+  /** Kasernen, die eine Nation gerade besitzt */
+  barracksOf(n: number): number[] {
+    return this.barracks.filter((p) => this.owner[p] === n);
+  }
+
+  /** Sammelpunkt setzen (null = keiner) */
+  setRally(n: number, pointId: number | null) {
+    this.nations[n].rally = pointId;
+    this.dirty = true;
+  }
+
+  /** Ausbildung: freie Kasernen übernehmen wartende Einheiten, fertige Einheiten treten an */
+  private updateTraining(n: Nation, dt: number) {
+    const mine = this.barracksOf(n.id);
+    // Kaserne verloren: die Einheit wartet auf eine andere (Fortschritt bleibt)
+    for (const q of n.queue) if (q.prov >= 0 && !mine.includes(q.prov)) q.prov = -1;
+    const busy = new Set(n.queue.filter((q) => q.prov >= 0).map((q) => q.prov));
+    const free = mine.filter((p) => !busy.has(p));
+    if (free.length > 0 && n.queue.some((q) => q.prov < 0)) {
+      // Ziel: der Sammelpunkt, sonst die nächste eigene Front, sonst die Hauptstadt
+      const rally = n.rally !== null ? this.point(n.rally) : null;
+      const fronts = this.points.filter((p) => this.sideAt(p, n.id) >= 0);
+      const cap = this.map.provinces[n.capital];
+      const goal = rally ?? fronts[0] ?? { x: cap.x, y: cap.y };
+      const dist = (p: number) => Math.hypot(this.map.provinces[p].x - goal.x, this.map.provinces[p].y - goal.y);
+      free.sort((a, b) => dist(a) - dist(b));
+      for (const q of n.queue) {
+        if (q.prov >= 0) continue;
+        const p = free.shift();
+        if (p === undefined) break;
+        q.prov = p;
+      }
+    }
+    for (const q of n.queue) if (q.prov >= 0) q.left -= dt;
+    const done = n.queue.filter((q) => q.prov >= 0 && q.left <= 0);
+    if (done.length === 0) return;
+    n.queue = n.queue.filter((q) => !done.includes(q));
+    for (const q of done) {
+      const d = this.createDivision(n.id, q.kind, q.prov);
+      const rally = n.rally !== null ? this.point(n.rally) : null;
+      if (rally && this.sideAt(rally, n.id) >= 0) this.send(d.id, { t: "front", point: rally.id });
+      if (n.id === this.player)
+        this.log(`${d.name} ist in ${this.map.provinces[q.prov].name} einsatzbereit${rally ? " und marschiert zum Sammelpunkt" : ""}.`, "good", false);
+    }
   }
 
   // ================================================================ Abfragen
@@ -258,7 +338,7 @@ export class World {
     nat.res.gold -= c.gold;
     nat.res.material -= c.material;
     nat.res.recruits -= c.recruits;
-    nat.queue.push({ kind, left: UNITS[kind].trainTime });
+    nat.queue.push({ kind, left: UNITS[kind].trainTime, prov: -1 });
     return true;
   }
 
@@ -452,16 +532,8 @@ export class World {
       if (n.res.food < 0) n.res.food = 0;
       if (n.hungry && !wasHungry && n.id === this.player)
         this.log("Nahrung aufgebraucht! Die Truppen hungern und kämpfen schlechter.", "bad", true);
-      // Ausbildung (nur die erste Einheit in der Schlange)
-      const q = n.queue[0];
-      if (q) {
-        q.left -= dt;
-        if (q.left <= 0) {
-          n.queue.shift();
-          const d = this.createDivision(n.id, q.kind, n.capital);
-          if (n.id === this.player) this.log(`${d.name} ist einsatzbereit.`, "good", false);
-        }
-      }
+      // Ausbildung: jede eigene Kaserne bildet eine Einheit gleichzeitig aus
+      if (dt > 0) this.updateTraining(n, dt);
     }
   }
 
@@ -579,6 +651,8 @@ export class World {
         this.eliminate(loser, winner);
       } else {
         L.capital = rest.sort((a, b) => this.map.provinces[b].area - this.map.provinces[a].area)[0];
+        // die neue Hauptstadt bekommt eine Kaserne, damit weiter ausgebildet werden kann
+        if (!this.barracks.includes(L.capital)) this.barracks.push(L.capital);
         this.log(`${L.short} verlegt die Hauptstadt nach ${this.map.provinces[L.capital].name}.`, "info", loser === this.player);
       }
     }
@@ -672,6 +746,13 @@ export class World {
     for (const o of old) {
       if (used.has(o)) continue;
       if (o.battle) o.battle.dispose(this);
+      // Sammelpunkt wandert mit der Front (oder entfällt)
+      for (const n of this.nations) {
+        if (n.rally !== o.id) continue;
+        const alt = this.nearestPointFor({ nation: n.id }, o);
+        n.rally = alt ? alt.id : null;
+        if (n.id === this.player && !alt) this.log("Der Sammelpunkt ist weggefallen – neue Einheiten bleiben in der Kaserne.", "info", false);
+      }
       for (const d of this.divisions.values()) {
         const at = d.loc.t === "front" && d.loc.point === o.id;
         const going = d.loc.t === "move" && d.loc.dest.t === "front" && d.loc.dest.point === o.id;
@@ -690,7 +771,7 @@ export class World {
     }
   }
 
-  private nearestPointFor(d: Division, near: { x: number; y: number }) {
+  private nearestPointFor(d: Pick<Division, "nation">, near: { x: number; y: number }) {
     let best: FrontPoint | null = null;
     let bd = 250;
     for (const p of this.points) {

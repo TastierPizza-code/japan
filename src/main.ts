@@ -90,7 +90,8 @@ class App {
       <h2>Europa, Sommer 1914 – eine andere Geschichte</h2>
       <p>Die Welt läuft in Echtzeit (1 Minute = 1 Tag) und lässt sich jederzeit pausieren. Wenn du Krieg führst,
       entstehen an den Grenzen <b>Frontpunkte</b>. Jeder ist eine laufende Schlacht. Wer dort
-      <b>70 % der Gesamtstärke</b> stellt, schiebt die Front vor und erobert Provinz um Provinz.</p>
+      <b>70 % der Gesamtstärke</b> stellt, schiebt die Front vor und erobert Provinz um Provinz.
+      Neue Truppen entstehen in deinen <b>Kasernen</b> (★ ⌂) – setze einen <b>Sammelpunkt ⚑</b>, dann marschieren sie selbst an die Front.</p>
       <h4>Wähle deine Nation</h4>
       <div class="nations">${nations
         .map((n) => `<button data-nation="${n.id}" style="--c:${n.color}"><i></i>${n.name}</button>`)

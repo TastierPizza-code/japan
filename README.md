@@ -26,6 +26,12 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
   auch wenn du nicht hinschaust.
 - Einfache Wirtschaft (Gold, Nahrung, Material, Rekruten) und Ausbildung von Infanterie, MGs,
   Artillerie und Magiern.
+- **Kasernen**: Ausgebildet wird nur in festen Kasernen (★ Hauptstadt, ⌂ große Städte und
+  Industrieprovinzen, etwa eine je 3 Städte, höchstens 8). Jede Kaserne bildet eine Einheit
+  gleichzeitig aus, weitere Aufträge warten auf die nächste freie. Eroberte Kasernen wechseln den
+  Besitzer. Die Wirtschaft bestimmt, wie viele Kasernen man gleichzeitig bezahlen kann.
+- **Sammelpunkt ⚑**: Einen eigenen Frontpunkt als Sammelpunkt setzen. Neue Einheiten werden dann
+  bevorzugt in der nächstgelegenen Kaserne ausgebildet und marschieren selbst dorthin.
 - Diplomatie: Meinungen, Bündnisse, Krieg erklären, Frieden anbieten. Computer-Nationen handeln
   selbstständig.
 

@@ -148,6 +148,22 @@ export class CampaignView {
       const p = cam.toScreen(pr.x, pr.y);
       parts.push(`<text x="${p.x}" y="${p.y + 4}" class="cap">★</text>`);
     }
+    // Kasernen (ohne Hauptstädte, die haben den Stern)
+    for (const b of w.barracks) {
+      if (w.nations[w.owner[b]].capital === b) continue;
+      const pr = w.map.provinces[b];
+      const p = cam.toScreen(pr.x, pr.y);
+      parts.push(`<text x="${p.x}" y="${p.y + 4}" class="cap barr">⌂</text>`);
+    }
+    // Sammelpunkt
+    {
+      const r = w.nations[w.player].rally;
+      const rp = r !== null ? w.point(r) : null;
+      if (rp) {
+        const p = cam.toScreen(rp.x, rp.y);
+        parts.push(`<text x="${p.x}" y="${p.y - 22}" class="cap rally">⚑</text>`);
+      }
+    }
     // Eigene Truppen unterwegs
     for (const d of w.divisions.values()) {
       if (d.nation !== w.player || d.loc.t !== "move") continue;
@@ -431,6 +447,10 @@ export class CampaignView {
       html += `</div>`;
     }
     html += `<button class="wide" data-act="sendto" data-id="${p.id}">＋ Truppen schicken</button>`;
+    if (w.sideAt(p, w.player) >= 0) {
+      const isRally = w.nations[w.player].rally === p.id;
+      html += `<button class="wide" data-act="rally" data-id="${isRally ? -1 : p.id}">${isRally ? "⚑ Sammelpunkt aufheben" : "⚑ Als Sammelpunkt setzen"}</button>`;
+    }
     return html;
   }
 
@@ -440,8 +460,9 @@ export class CampaignView {
     const owner = w.owner[id];
     const typeName = { land: "Ländlich", agrar: "Ackerland", industrie: "Industrie", stadt: "Stadt" }[pr.type];
     const isCap = w.nations[owner].capital === id;
-    let html = `<h3>${pr.name}${isCap ? " ★" : ""}</h3>
-      <p>${nationTag(w, owner)} · ${typeName} · ${fmt(pr.area)} km²${pr.nation !== owner ? ` · <span class="muted">besetzt (vorher ${w.nations[pr.nation].short})</span>` : ""}</p>`;
+    const isBarr = w.barracks.includes(id);
+    let html = `<h3>${pr.name}${isCap ? " ★" : ""}${isBarr && !isCap ? " ⌂" : ""}</h3>
+      <p>${nationTag(w, owner)} · ${typeName} · ${fmt(pr.area)} km²${pr.nation !== owner ? ` · <span class="muted">besetzt (vorher ${w.nations[pr.nation].short})</span>` : ""}</p>${isBarr ? `<p class="muted small">Kaserne – bildet eine Einheit gleichzeitig aus.</p>` : ""}`;
     const here = [...w.divisions.values()].filter((d) => d.nation === w.player && d.loc.t === "prov" && d.loc.prov === id);
     if (here.length) {
       html += `<h4>Eigene Truppen (${here.length})</h4><div class="list">`;
@@ -487,7 +508,16 @@ export class CampaignView {
   private recruitTab(): string {
     const w = this.world;
     const n = w.nations[w.player];
-    let html = `<p class="muted small">Neue Verbände werden in der Hauptstadt ausgebildet (1 Minute = 1 Tag).</p><div class="cards">`;
+    const barr = w.barracksOf(w.player);
+    const rp = n.rally !== null ? w.point(n.rally) : null;
+    let html = `<p class="muted small">Ausgebildet wird in den Kasernen (★ Hauptstadt, ⌂ Kaserne) – jede Kaserne bildet eine Einheit gleichzeitig aus, weitere warten auf die nächste freie (1 Minute = 1 Tag).
+      ${rp ? `Neue Einheiten marschieren zum Sammelpunkt ⚑ <b>${w.map.provinces[w.sideAt(rp, w.player) === 1 ? rp.provB : rp.provA].name}</b>.` : "Tipp: Einen Frontpunkt als Sammelpunkt ⚑ setzen – neue Einheiten marschieren dann selbst dorthin."}</p>`;
+    html += `<h4>Kasernen (${barr.length})</h4><div class="list">`;
+    for (const b of barr) {
+      const q = n.queue.find((e) => e.prov === b);
+      html += `<div class="divrow"><span>${n.capital === b ? "★" : "⌂"} ${w.map.provinces[b].name}</span><small>${q ? `${KIND_ICON[q.kind]} ${UNITS[q.kind].name} · ${days(Math.max(0, q.left))}` : `<span class="good">frei</span>`}</small></div>`;
+    }
+    html += `</div><div class="cards">`;
     for (const kind of Object.keys(UNITS) as UnitKind[]) {
       const u = UNITS[kind];
       const c = u.cost;
@@ -498,12 +528,10 @@ export class CampaignView {
         <button ${ok ? "" : "disabled"} data-act="recruit" data-kind="${kind}">Ausbilden</button></div>`;
     }
     html += `</div>`;
-    if (n.queue.length) {
-      html += `<h4>In Ausbildung</h4><div class="list">`;
-      n.queue.forEach((q, i) => {
-        const u = UNITS[q.kind];
-        html += `<div class="divrow"><span>${KIND_ICON[q.kind]} ${u.name}</span><small>${i === 0 ? days(q.left) : "wartet"}</small></div>`;
-      });
+    const waiting = n.queue.filter((q) => q.prov < 0);
+    if (waiting.length) {
+      html += `<h4>Wartet auf freie Kaserne (${waiting.length})</h4><div class="list">`;
+      for (const q of waiting) html += `<div class="divrow"><span>${KIND_ICON[q.kind]} ${UNITS[q.kind].name}</span><small>wartet</small></div>`;
       html += `</div>`;
     }
     return html;
@@ -607,6 +635,9 @@ export class CampaignView {
       case "close":
         closeDialog();
         return;
+      case "rally":
+        w.setRally(w.player, id < 0 ? null : id);
+        break;
       case "recruit":
         w.recruit(w.player, el.dataset.kind as UnitKind);
         break;

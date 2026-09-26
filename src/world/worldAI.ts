@@ -32,7 +32,8 @@ export class WorldAI {
 
   private recruit(w: World, n: number) {
     const nat = w.nations[n];
-    if (nat.queue.length >= 2) return;
+    // Nur nachbestellen, wenn eine Kaserne frei ist (plus eine Einheit Vorlauf)
+    if (nat.queue.length >= w.barracksOf(n).length + 1) return;
     const atWar = w.enemiesOf(n).length > 0;
     const r = w.rng.next();
     let kind: UnitKind = "infantry";
