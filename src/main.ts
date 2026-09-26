@@ -31,6 +31,7 @@ class App {
   constructor(map: GameMap) {
     this.map = map;
     $("#pause").addEventListener("click", () => this.togglePause());
+    $("#helpBtn").addEventListener("click", () => this.help());
     document.querySelectorAll<HTMLButtonElement>(".speed").forEach((b) =>
       b.addEventListener("click", () => this.setSpeed(+b.dataset.speed!)),
     );
@@ -319,6 +320,45 @@ class App {
       .map((o, i) => `<button data-decision="${d.id}" data-option="${i}" class="${i === 0 ? "primary" : ""}">${o.label}</button>`)
       .join("")}</div></div>`;
     box.hidden = false;
+  }
+
+  /** Kurze Taktik-Hilfe; pausiert das Spiel, solange sie offen ist */
+  private help() {
+    const d = $("#dialog");
+    if (!d.hidden) return;
+    this.togglePause(true);
+    d.hidden = false;
+    d.innerHTML = `<div class="card help">
+      <h1>Taktik</h1>
+      <p>Deine <b>Offiziere</b> führen jede Flanke: <i>Halten · Defensiv · Ausgewogen · Aggressiv</i>.
+      Du gibst die großen Befehle. Einzelne Kompanien kannst du übernehmen und dem Offizier zurückgeben.</p>
+      <h3>Angreifen</h3>
+      <ul>
+        <li><b>Angriff planen</b> (G): Abschnitt antippen. Der Offizier zerschießt den Draht und vergast die Reserven.
+        Panzer rollen voraus, Nebel fällt, Stoßtrupps stürmen, die zweite Welle folgt.</li>
+        <li>Am besten <b>kontern</b>: dort angreifen, wo der Feind gerade bei einem Sturm geblutet hat.</li>
+        <li>Gegen einen voll besetzten Graben scheitert fast jeder Angriff. Schwäche ihn vorher mit Artillerie und Magiern.</li>
+      </ul>
+      <h3>Artillerie</h3>
+      <ul>
+        <li><b>Sprengfeuer</b> (A): gegen Truppen im Freien und MG-Nester.</li>
+        <li><b>Nebel</b> (N): auf den feindlichen Graben legen, dann sehen die Verteidiger erst auf wenige Meter.</li>
+        <li><b>Gas</b> (K): auf Reserven und Batterien. Es treibt nach rechts, auch zu den eigenen Leuten.</li>
+        <li>Solange du zuschaust, halten die Offiziere <b>eine Batterie für dich frei</b>. Nutze sie als Sperrfeuer,
+        wenn „Feind stürmt!“ gemeldet wird.</li>
+      </ul>
+      <h3>Gut zu wissen</h3>
+      <ul>
+        <li><b>MGs</b> beherrschen das freie Feld, <b>Panzer</b> sind dagegen immun. Tankgewehre und Geschütze knacken sie.</li>
+        <li><b>Gräben</b> haben Traversen: Längs hindurch sieht man nur wenige Meter weit, dort helfen Handgranaten.</li>
+        <li><b>Magier</b> kämpfen am besten über der eigenen Stellung, wo Gewehre und MGs mithelfen.</li>
+        <li>Meldungen oben antippen, dann springt die Kamera hin. <b>Leertaste</b> pausiert.</li>
+      </ul>
+      <button id="helpClose" class="wide primary">Weiter</button></div>`;
+    $("#helpClose").addEventListener("click", () => {
+      d.hidden = true;
+      d.innerHTML = "";
+    });
   }
 
   private skirmishResult() {

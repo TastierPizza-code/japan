@@ -958,3 +958,24 @@ table.kills td:nth-child(2) {
 table.kills td:nth-child(3) {
   color: var(--enemy);
 }
+
+/* Taktik-Hilfe */
+.card.help {
+  max-height: 85vh;
+  overflow: auto;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.card.help h3 {
+  margin: 12px 0 4px;
+}
+
+.card.help ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.card.help li {
+  margin: 3px 0;
+}
