@@ -22,7 +22,6 @@ class App {
   view: "map" | "battle" | "menu" = "menu";
   paused = true;
   speed = 1;
-  autoPause = true;
   private acc = 0;
   private last = performance.now();
   private hudTimer = 0;
@@ -226,7 +225,7 @@ class App {
 
   private onEvent(e: WorldEvent) {
     this.toast(e.text, e.kind, e.point);
-    if (e.pause && this.autoPause && !this.paused) {
+    if (e.pause && this.world?.autoPause && !this.paused) {
       this.togglePause(true);
       this.toast("⏸ Automatisch pausiert", "info");
     }

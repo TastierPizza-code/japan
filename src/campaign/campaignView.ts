@@ -522,7 +522,7 @@ export class CampaignView {
 
   private logTab(): string {
     const w = this.world;
-    let html = `<div class="list">`;
+    let html = `<button class="wide ${w.autoPause ? "on" : ""}" data-act="autopause">Auto-Pause bei wichtigen Ereignissen: ${w.autoPause ? "an" : "aus"}</button><div class="list">`;
     for (const e of [...w.events].reverse().slice(0, 60)) {
       const date = new Date(Date.UTC(1914, 6, 28) + Math.floor(e.time / SECONDS_PER_DAY) * 86400000).toLocaleDateString("de-DE", {
         day: "numeric",
@@ -607,6 +607,9 @@ export class CampaignView {
         return;
       case "peace":
         w.offerPeace(w.player, id);
+        break;
+      case "autopause":
+        w.autoPause = !w.autoPause;
         break;
       case "yes":
         this.confirmAct?.();

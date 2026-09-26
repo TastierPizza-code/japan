@@ -125,6 +125,8 @@ export class World {
   onEvent: ((e: WorldEvent) => void) | null = null;
   /** true, wenn sich Besitz oder Fronten geändert haben (Karte neu zeichnen) */
   dirty = true;
+  /** Bei wichtigen Ereignissen automatisch pausieren */
+  autoPause = true;
   /** Diese Schlacht wird gerade angesehen (Effekte behalten). */
   viewedPoint = -1;
 
