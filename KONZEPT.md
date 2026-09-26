@@ -108,6 +108,26 @@ Die Schlachten sollen später richtig gut aussehen und sich glaubwürdig anfühl
   (z. B. nach Artillerie, gegen geschwächte Stellungen)
 - Verwundete/Fliehende ziehen sich nach hinten zurück, Nachschub rückt geordnet nach
 
+### Taktische Vorteile (v0.4)
+
+Gleich starke Seiten bluten beide aus. Wer klüger führt, soll aber klar im Vorteil sein.
+
+| Mittel | Wirkung | Gegenmittel |
+| --- | --- | --- |
+| Nebel (Artillerie) | Verteidiger sehen kaum, Treffer und Niederhalten sinken stark | Nebel treibt ab und verfliegt nach gut einer Minute; Handgranaten wirken trotzdem |
+| Draht zerschießen, dann durch die Lücke | Sturm bleibt nicht im Draht hängen | Zweiter Drahtgürtel, MG auf die Lücke |
+| Feuerwalze | Verteidiger ducken sich, bis die Stürmer da sind | Gegenbatterie: feuernde Batterien werden geortet |
+| Stoßtrupps | Feuer im Vorgehen, Handgranaten in Gräben, halten länger durch | wenige Männer, teuer |
+| Flankenfeuer | Brustwehr schützt längs des Grabens kaum | Traversen, Flanken sichern |
+| Einbruch sichern | Wer im Graben steht, richtet ihn ein, ein MG wird nachgezogen | sofortiger Gegenstoß |
+| Magier über eigener Stellung | eigene Gewehre und MGs helfen im Luftkampf | nicht über feindliche Linien fliegen |
+
+Messung (je 4 Karten, beide Seitenrollen, `scripts/headless.ts`, Szenario-Skripte):
+- Angriff gegen einen haltenden Graben: erfahren 0,86 Tote je getötetem Verteidiger,
+  unerfahren 1,11.
+- Großschlacht erfahren gegen unerfahren: 7 von 8 gewonnen. Den Magierkampf gewinnt die
+  erfahrene Seite 8 von 8 Mal, weil sie ihn über der eigenen Stellung annimmt.
+
 ## Wirtschaft (einfach)
 
 - Wenige Ressourcen: **Gold, Nahrung, Material, Rekruten**

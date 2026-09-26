@@ -36,15 +36,28 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
   und Minenfeldern.
 - Einzeln erkennbare Pixel-Soldaten (stehend, rennend, liegend, im Graben). Jeder hat einen eigenen
   Platz, und unter Beschuss geht es von Trichter zu Trichter. Maßstab in Metern.
-- Truppen: Schützen, MGs, Tankgewehre, Flammenwerfer, Panzer (Rhombus-Typ), Feldgeschütze mit
+- Truppen: Schützen, Stoßtrupps, MGs, Tankgewehre, Flammenwerfer, Panzer (Rhombus-Typ), Feldgeschütze mit
   sichtbarem Granatenflug, Magier. Dazu Minen, Brände, Gegenbatteriefeuer und Panzer, die
   Stacheldraht niederwalzen und liegen bleiben können.
 - Effekte: Mündungsfeuer, Leuchtspuren, Erd- und Blutspritzer, Blut, das langsam verblasst,
   Gefallene, Explosionen mit Druckwelle und Trümmern, Rauch, Kamerawackeln, synthetischer Ton.
 - Drei Darstellungen zum Umschalten (Taste V): Klassisch, Deutlich (Farbmarker für kleine Bildschirme),
   Punkte (Übersicht).
+- **Taktik lohnt sich**:
+  - **Nebel** (Taste N) schießt eine Batterie Nebelgranaten. Auf den feindlichen Graben gelegt,
+    sehen die Verteidiger die Angreifer erst auf wenige Meter. Der Nebel treibt im Wind.
+  - **Stoßtrupps** (⚔) schießen im Vorgehen und werfen Handgranaten in Gräben und Trichter.
+  - **Flankenfeuer**: Wer längs eines Grabens schießt, dem hilft die Brustwehr des Gegners kaum.
+    MGs an der Flanke und aufgerollte Gräben sind darum stark.
+  - Stürme brechen bei hohen Verlusten zusammen, statt bis zum letzten Mann zu laufen.
+  - **Magier** sind über der eigenen Stellung am stärksten, weil Gewehre und MGs dort mithelfen.
+    Tief über feindlichen Linien sind sie verwundbar.
 - Die Offiziere führen die Schlacht, du kannst jederzeit einzelne Kompanien übernehmen (✋) und
-  wieder abgeben.
+  wieder abgeben. **Erfahrene Offiziere** zerschießen erst den Draht und legen Nebel auf den
+  Graben. Sie stürmen durch die Lücke hinter einer Feuerwalze, brechen festgefahrene Angriffe ab
+  und sichern Einbrüche mit einem nachgezogenen MG. Ihre Magier halten sie als Luftabwehr zurück.
+  Im Test gewinnen sie 7 von 8 Großschlachten gegen unerfahrene Offiziere, die einfach
+  losstürmen. Im schnellen Gefecht kannst du wählen, wie erfahren der Gegner ist.
 - Nachschub marschiert vom hinteren Kartenrand ein. Verluste fließen zurück in die Divisionen der
   Kampagne.
 - Im Menü gibt es außerdem **„Nur ein schnelles Gefecht“** zum Ausprobieren.
@@ -80,7 +93,7 @@ Dann auf dem Handy `http://<IP-deines-PCs>:8080` öffnen.
 | Pause / Tempo         | ⏸ 1× 2× 4× 8×               | Leertaste, 1–4       |
 | Frontpunkt öffnen     | Balken auf der Grenze       | Klick                |
 | Zurück zur Karte      | 🗺                          | Esc                  |
-| In der Schlacht       | Kompanie antippen, dann Ziel | H / S / R / O / A   |
+| In der Schlacht       | Kompanie antippen, dann Ziel | H / S / R / O / A / N |
 
 ## Aufbau des Codes
 

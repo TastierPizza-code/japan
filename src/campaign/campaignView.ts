@@ -12,8 +12,8 @@ type Selection = { t: "none" } | { t: "prov"; id: number } | { t: "point"; id: n
 
 const STANCE_ORDER: Stance[] = ["hold", "defensive", "balanced", "aggressive"];
 const LANE_NAMES = ["Links", "Mitte", "Rechts"];
-const KIND_ICON: Record<UnitKind, string> = { infantry: "🪖", mg: "⚙", artillery: "💥", mage: "✦", tank: "▰", at: "🎯", flame: "🔥" };
-const KIND_UNIT: Record<UnitKind, string> = { infantry: "Mann", mg: "MGs", artillery: "Geschütze", mage: "Magier", tank: "Panzer", at: "Tankgewehre", flame: "Flammenwerfer" };
+const KIND_ICON: Record<UnitKind, string> = { infantry: "🪖", mg: "⚙", artillery: "💥", mage: "✦", tank: "▰", at: "🎯", flame: "🔥", storm: "⚔" };
+const KIND_UNIT: Record<UnitKind, string> = { infantry: "Mann", mg: "MGs", artillery: "Geschütze", mage: "Magier", tank: "Panzer", at: "Tankgewehre", flame: "Flammenwerfer", storm: "Stoßtruppler" };
 
 /** Die Kampagnenkarte: Länder, Fronten, eigene Truppen und alle Menüs. */
 export class CampaignView {

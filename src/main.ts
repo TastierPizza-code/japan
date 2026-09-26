@@ -104,6 +104,7 @@ class App {
       <div class="row" style="margin-bottom:8px">
         <button id="optBig" class="${this.skBig ? "on" : ""}">Großschlacht (~8.000 Mann)</button>
         <button id="optWatch" class="${this.skWatch ? "on" : ""}">Zuschauen (KI gegen KI)</button>
+        <button id="optVet" class="${this.skVeteran ? "on" : ""}" title="Erfahrene Offiziere nutzen Nebel, Drahtlücken, Feuerwalzen und halten ihre Magier über der eigenen Stellung">Gegner: ${this.skVeteran ? "erfahren" : "unerfahren"}</button>
       </div>
       <div class="list">${BIOMES.map((b) => `<button class="rowbtn" data-biome="${b}"><span>${BIOME_NAMES[b]}</span></button>`).join("")}
         <button class="rowbtn primary" data-biome="random"><span>Zufällige Landschaft</span></button>
@@ -111,6 +112,10 @@ class App {
       <button id="menuBack" class="wide">Zurück</button></div>`;
     $("#optBig").addEventListener("click", () => {
       this.skBig = !this.skBig;
+      this.skirmishMenu();
+    });
+    $("#optVet").addEventListener("click", () => {
+      this.skVeteran = !this.skVeteran;
       this.skirmishMenu();
     });
     $("#optWatch").addEventListener("click", () => {
@@ -140,11 +145,12 @@ class App {
 
   skBig = false;
   skWatch = false;
+  skVeteran = true;
 
   startSkirmish(biome?: Biome) {
     $("#dialog").hidden = true;
     const battle = new Battle((Math.random() * 1e9) | 0, { biome, big: this.skBig });
-    const ais = [new BattleAI(ENEMY)];
+    const ais = [new BattleAI(ENEMY, "balanced", this.skVeteran)];
     if (this.skWatch) ais.push(new BattleAI(PLAYER));
     this.skirmish = { battle, ais, shown: false };
     this.battleView.open({ battle, spectator: this.skWatch });

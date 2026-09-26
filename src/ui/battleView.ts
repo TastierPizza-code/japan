@@ -10,7 +10,7 @@ import { STANCE_NAMES, type World } from "../world/world.ts";
 import { bindGestures, watchSize } from "./gestures.ts";
 import { Overlay, shortName } from "./overlay.ts";
 
-type Mode = "none" | "storm" | "arty";
+type Mode = "none" | "storm" | "arty" | "smoke";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -60,6 +60,7 @@ export class BattleView {
       b.addEventListener("click", () => this.order(b.dataset.order!)),
     );
     $("#arty").addEventListener("click", () => this.setMode(this.mode === "arty" ? "none" : "arty"));
+    $("#smokeBtn").addEventListener("click", () => this.setMode(this.mode === "smoke" ? "none" : "smoke"));
     $("#modecancel").addEventListener("click", () => this.setMode("none"));
     $("#reserve").addEventListener("click", () => {
       this.ctx?.battle.callReserve(PLAYER);
@@ -211,8 +212,8 @@ export class BattleView {
     if (!this.ctx || this.ctx.spectator) return;
     const w = this.cam.toWorld(sx, sy);
     const b = this.battle;
-    if (this.mode === "arty") {
-      if (b.callArtillery(PLAYER, w.x, w.y)) this.setMode("none");
+    if (this.mode === "arty" || this.mode === "smoke") {
+      if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "smoke" ? "smoke" : "he")) this.setMode("none");
       this.hud();
       return;
     }
@@ -262,8 +263,15 @@ export class BattleView {
     this.mode = m;
     $("#modebar").hidden = m === "none";
     $("#modetext").textContent =
-      m === "arty" ? "Artillerie: Zielgebiet antippen" : m === "storm" ? "Sturmangriff: Ziel antippen" : "";
+      m === "arty"
+        ? "Artillerie: Zielgebiet antippen"
+        : m === "smoke"
+          ? "Nebel: auf den feindlichen Graben legen, dann stürmen (treibt mit dem Wind nach rechts)"
+          : m === "storm"
+            ? "Sturmangriff: Ziel antippen"
+            : "";
     $("#arty").classList.toggle("on", m === "arty");
+    $("#smokeBtn").classList.toggle("on", m === "smoke");
     $('[data-order="storm"]').classList.toggle("on", m === "storm");
   }
 
@@ -275,6 +283,7 @@ export class BattleView {
     else if (k === "r") this.order("retreat");
     else if (k === "o") this.order("officer");
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
+    else if (k === "n") this.setMode(this.mode === "smoke" ? "none" : "smoke");
     else if (k === "v") this.cycleStyle();
     else if (k === "escape" && (this.mode !== "none" || this.selected >= 0)) {
       if (this.mode !== "none") this.setMode("none");
@@ -353,6 +362,7 @@ export class BattleView {
         ? "Keine Artillerie"
         : `Artillerie ${side.artyCharges}/${side.artyMax}` + (side.artyCharges < side.artyMax ? ` · ${Math.ceil(side.artyTimer)}s` : "");
     arty.disabled = side.artyCharges === 0 && this.mode !== "arty";
+    $<HTMLButtonElement>("#smokeBtn").disabled = side.artyCharges === 0 && this.mode !== "smoke";
     const res = $<HTMLButtonElement>("#reserve");
     res.textContent = `Reserve (${side.reserves})` + (side.reserveCooldown > 0 ? ` ${Math.ceil(side.reserveCooldown)}s` : "");
     res.disabled = side.reserves === 0 || side.reserveCooldown > 0;

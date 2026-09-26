@@ -5,12 +5,14 @@ import {
   GUN_Y,
   MG_PER_SECTION,
   REAR_Y,
+  STORM_PER_SQUAD,
   UNIT_AT,
   UNIT_FLAME,
   UNIT_GUN,
   UNIT_MAGE,
   UNIT_MG,
   UNIT_RIFLE,
+  UNIT_STORM,
   UNIT_TANK,
   WORLD_W,
 } from "../sim/config.ts";
@@ -174,6 +176,12 @@ export class FrontBattle {
             const slot = slotOf(UNIT_FLAME);
             const x = LANES[slot % 3] - 90;
             spawn(UNIT_FLAME, `Fl ${num}`, x, t.supportY(bs, x), spare);
+          }
+        } else if (d.kind === "storm") {
+          if (spare >= 1) {
+            const slot = slotOf(UNIT_STORM);
+            const x = LANES[(slot + 2) % 3] + 60;
+            spawn(UNIT_STORM, `St ${num}`, x, t.supportY(bs, x), Math.min(STORM_PER_SQUAD, spare));
           }
         } else if (d.kind === "mage") {
           if (spare >= 1) spawn(UNIT_MAGE, `✦ ${num}`, WORLD_W / 2, REAR_Y[bs], spare);

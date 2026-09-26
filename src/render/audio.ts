@@ -1,7 +1,7 @@
 // Schlachtgeräusche, komplett synthetisch (WebAudio) – keine Audiodateien nötig.
 // Browser erlauben Ton erst nach einer Nutzeraktion: unlock() beim ersten Klick aufrufen.
 
-type Kind = "rifle" | "mg" | "at" | "gun" | "boom" | "mine" | "cannonHit" | "whistle" | "flame" | "magic" | "magicBoom";
+type Kind = "rifle" | "mg" | "at" | "gun" | "boom" | "mine" | "cannonHit" | "whistle" | "flame" | "magic" | "magicBoom" | "grenade" | "smokePop";
 
 const MIN_GAP: Record<Kind, number> = {
   rifle: 0.025,
@@ -15,6 +15,8 @@ const MIN_GAP: Record<Kind, number> = {
   flame: 0.12,
   magic: 0.08,
   magicBoom: 0.08,
+  grenade: 0.05,
+  smokePop: 0.12,
 };
 
 export class BattleAudio {
@@ -132,6 +134,14 @@ export class BattleAudio {
         o.stop(now + 0.22);
         break;
       }
+      case "grenade":
+        this.thump(out, now, 80 * jitter, 0.25, 0.45 * vol);
+        this.burst(out, now, 0.3, "lowpass", 900, 0.6, 0.4 * vol);
+        break;
+      case "smokePop":
+        this.thump(out, now, 70, 0.2, 0.25 * vol);
+        this.burst(out, now, 1.2, "highpass", 1200, 0.4, 0.12 * vol);
+        break;
       case "magicBoom":
         this.thump(out, now, 120, 0.3, 0.4 * vol);
         this.burst(out, now, 0.3, "highpass", 2000, 0.5, 0.2 * vol);

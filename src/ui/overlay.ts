@@ -1,5 +1,5 @@
 import type { Battle, Company } from "../sim/battle.ts";
-import { ARTY_SPREAD, OBJECTIVE_RADIUS, PLAYER, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_TANK } from "../sim/config.ts";
+import { ARTY_SPREAD, OBJECTIVE_RADIUS, PLAYER, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_STORM, UNIT_TANK } from "../sim/config.ts";
 import type { Camera } from "../render/camera.ts";
 
 const PC = "#8cb8f2";
@@ -73,10 +73,61 @@ export class Overlay {
     }
     this.svg.innerHTML = parts.join("");
 
-    for (const c of b.companies) this.updateFlag(c, cam, selected);
+    this.placeFlags(b, cam, selected);
   }
 
-  private updateFlag(c: Company, cam: Camera, selected: number) {
+  /**
+   * Fahnen ohne Überlappung verteilen: Wichtige zuerst (Auswahl, eigene, Angreifer),
+   * die übrigen weichen nach oben/unten aus. Wo es zu eng wird, bleiben nur die eigenen
+   * stehen, feindliche Fahnen verschwinden. Weit herausgezoomt werden alle Fahnen klein.
+   */
+  private placeFlags(b: Battle, cam: Camera, selected: number) {
+    const mini = cam.zoom < 0.4;
+    this.flagLayer.classList.toggle("mini", mini);
+    const H = mini ? 9 : 22;
+    const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+    const free = (x0: number, x1: number, y0: number, y1: number) => !placed.some((r) => x0 < r.x1 && x1 > r.x0 && y0 < r.y1 && y1 > r.y0);
+    const prio = (c: Company) =>
+      (c.id === selected ? 0 : 100) + (c.side === PLAYER ? 0 : 50) + (c.order === "storm" || c.order === "rout" ? 0 : 10) + (c.type === UNIT_GUN ? 20 : 0);
+    const list = b.companies.filter((c) => c.alive > 0).sort((p, q) => prio(p) - prio(q));
+    for (const c of b.companies) if (c.alive <= 0) this.hideFlag(c.id);
+    for (const c of list) {
+      const p = cam.toScreen(c.cx, c.cy);
+      if (p.x < -60 || p.y < -60 || p.x > cam.viewW + 60 || p.y > cam.viewH + 60) {
+        this.hideFlag(c.id);
+        continue;
+      }
+      // Fahne neben die Truppe setzen, nicht darauf – bei starkem Zoom etwas weiter weg
+      const off = Math.max(mini ? 6 : 16, STATS[c.type].radius * cam.zoom * 1.6);
+      const baseY = c.side === PLAYER ? p.y + off : p.y - off - H;
+      const w = mini ? 12 : 12 + 7 * shortName(c).length;
+      const x0 = p.x - w / 2;
+      const x1 = p.x + w / 2;
+      const dir = c.side === PLAYER ? 1 : -1;
+      let y: number | null = null;
+      for (let k = 0; k < 4 && y === null; k++) {
+        const ty = baseY + dir * k * (H + 1);
+        if (free(x0, x1, ty, ty + H)) y = ty;
+      }
+      // Kein Platz: eigene Fahnen trotzdem zeigen (bleiben antippbar), feindliche weglassen
+      if (y === null) {
+        if (c.side !== PLAYER && c.id !== selected) {
+          this.hideFlag(c.id);
+          continue;
+        }
+        y = baseY;
+      }
+      placed.push({ x0, x1, y0: y, y1: y + H });
+      this.showFlag(c, p.x, y, selected);
+    }
+  }
+
+  private hideFlag(id: number) {
+    const f = this.flags.get(id);
+    if (f && f.el.style.display !== "none") f.el.style.display = "none";
+  }
+
+  private showFlag(c: Company, x: number, y: number, selected: number) {
     let f = this.flags.get(c.id);
     if (!f) {
       const el = document.createElement("div");
@@ -99,16 +150,8 @@ export class Overlay {
       f = { el, bar, label };
       this.flags.set(c.id, f);
     }
-    if (c.alive <= 0) {
-      f.el.style.display = "none";
-      return;
-    }
-    const p = cam.toScreen(c.cx, c.cy);
-    // Fahne neben die Truppe setzen, nicht darauf – bei starkem Zoom etwas weiter weg
-    const off = Math.max(16, STATS[c.type].radius * cam.zoom * 1.6);
-    const offset = c.side === PLAYER ? off : -off - 14;
     f.el.style.display = "";
-    f.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y + offset)}px) translateX(-50%)`;
+    f.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translateX(-50%)`;
     f.bar.style.width = `${Math.max(0, (c.alive / c.initial) * 100)}%`;
     f.el.classList.toggle("sel", c.id === selected);
     f.el.classList.toggle("rout", c.order === "rout");
@@ -121,6 +164,7 @@ export function shortName(c: Company) {
   if (c.type === UNIT_GUN) return "Art";
   if (c.type === UNIT_AT) return "AT";
   if (c.type === UNIT_FLAME) return "🔥";
+  if (c.type === UNIT_STORM) return "⚔";
   if (c.type === UNIT_MG) return c.side === PLAYER && c.name.startsWith("MG-Zug") ? c.name.replace("MG-Zug ", "MG ") : "MG";
   const m = c.name.match(/^\d+(\.\d+)?/);
   return m ? m[0] : c.name.slice(0, 3);

@@ -444,8 +444,21 @@ export class BattleAI {
     const foeReady = foeMages.filter((c) => c.order !== "retreat" && c.mana > 30).reduce((n, c) => n + c.alive, 0);
     const ours = squads.reduce((n, c) => n + c.alive, 0);
     const airOk = foeReady <= ours * 0.6;
-    if (squads.length === 0 || !airOk || squads.some((m) => atHome(m) && m.mana < 85)) {
+    if (squads.length === 0 || squads.some((m) => atHome(m) && m.mana < 85)) {
       home();
+      return;
+    }
+    if (!airOk) {
+      // Ohne Luftüberlegenheit nur Nahverteidigung: Angreifer vor dem eigenen Draht, gedeckt vom eigenen Graben
+      const close = foe
+        .filter((c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN && ahead(c) > -40 && ahead(c) < 220)
+        .sort((p, q) => score(b, q) - score(b, p))[0];
+      if (!close) {
+        home();
+        return;
+      }
+      const y = this.front(b, close.cx) + fwd * Math.min(ahead(close) - 60, 40);
+      squads.forEach((m, k) => b.orderMove(m.id, close.cx + (k - (squads.length - 1) / 2) * 30, y));
       return;
     }
     // nur was außerhalb der Reichweite der feindlichen Grabenbesatzung liegt

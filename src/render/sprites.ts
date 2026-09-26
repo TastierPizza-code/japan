@@ -73,6 +73,9 @@ export type FrameName =
   | "mg"
   | "at"
   | "flame"
+  | "storm"
+  | "stormRun1"
+  | "stormRun2"
   | "mage"
   | "tank"
   | "gun"
@@ -232,6 +235,30 @@ export class SpriteAtlas {
       d.line(8, 10, 14, 9, p.metal);
       d.px(15, 9, "#ff9a3a");
     });
+    // --- Stoßtrupp: kein Tornister, Karabiner, Sandsäcke voller Stielhandgranaten
+    const stormTrooper = (d: Px, legs: number) => {
+      if (legs === 1) {
+        d.px(2, 6, p.uniDark);
+        d.px(3, 6, p.uniDark);
+      } else if (legs === 2) {
+        d.px(2, 10, p.uniDark);
+        d.px(3, 10, p.uniDark);
+      }
+      soldierBody(d, p, 1);
+      // Granatsäcke über der Brust
+      d.rect(5, 5, 2, 2, p.gear);
+      d.rect(5, 9, 2, 2, p.gear);
+      // Stielhandgranaten am Koppel
+      d.px(4, 4, p.wood);
+      d.px(4, 12, p.wood);
+      d.px(3, 4, p.metal);
+      d.px(3, 12, p.metal);
+      if (legs === 0) d.line(9, 10, 13, 10, p.metal);
+      else d.line(7, 11, 11, 6, p.metal);
+    };
+    make("storm", 16, 16, S, (d) => stormTrooper(d, 0));
+    make("stormRun1", 16, 16, S, (d) => stormTrooper(d, 1));
+    make("stormRun2", 16, 16, S, (d) => stormTrooper(d, 2));
     // --- Magier mit Umhang
     make("mage", 16, 16, S * 1.1, (d) => {
       d.rect(2, 4, 5, 9, p.accent);

@@ -126,6 +126,18 @@ body {
   color: #fff;
 }
 
+/* weit herausgezoomt: nur kleine Farbmarken mit Stärkebalken */
+.mini .flag {
+  min-width: 10px;
+  padding: 1px 2px;
+  font-size: 0;
+  border-radius: 2px;
+}
+
+.mini .flag .bar {
+  margin-top: 0;
+}
+
 .flag.rout {
   animation: blink 0.6s infinite alternate;
 }

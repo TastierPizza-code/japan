@@ -159,7 +159,7 @@ export class World {
       opinion: new Array(n).fill(0),
       allies: [],
       queue: [],
-      counter: { infantry: 0, mg: 0, artillery: 0, mage: 0, tank: 0, at: 0, flame: 0 },
+      counter: { infantry: 0, mg: 0, artillery: 0, mage: 0, tank: 0, at: 0, flame: 0, storm: 0 },
     }));
     SCENARIO_1914(this);
     this.updateEconomy(0);

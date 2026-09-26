@@ -42,6 +42,7 @@ export class WorldAI {
     else if (r < 0.42) kind = "mg";
     else if (r < 0.48) kind = "at";
     else if (r < 0.53) kind = "flame";
+    else if (r < 0.58) kind = "storm";
     // Im Frieden sparsamer: Rücklage behalten
     const c = UNITS[kind].cost;
     const reserve = atWar ? 1 : 2.5;

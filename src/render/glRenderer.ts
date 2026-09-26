@@ -1,5 +1,5 @@
 import type { Battle } from "../sim/battle.ts";
-import { STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_TANK } from "../sim/config.ts";
+import { STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_STORM, UNIT_TANK } from "../sim/config.ts";
 import { K_BUNKER, K_TRENCH } from "../sim/terrain.ts";
 import type { Camera } from "./camera.ts";
 import { SpriteAtlas, type Frame, type FrameName } from "./sprites.ts";
@@ -270,6 +270,30 @@ export class GlRenderer {
       this.onSound?.("magicBoom", x, y);
       return;
     }
+    if (kind === 7) {
+      // Nebelgranate: dumpfer Knall, weißer Qualm quillt auf (die Wolke selbst zeichnet drawSmoke)
+      for (let j = 0; j < 10; j++) {
+        const a = rnd() * Math.PI * 2;
+        const sp = 10 + rnd() * 25;
+        this.part(x, y, 2, Math.cos(a) * sp, Math.sin(a) * sp, { drag: 1.2, life: 2.5 + rnd() * 2, s0: 6, s1: 26, c: [0.9, 0.9, 0.88, 0.55], mode: M_SOFT, top: true });
+      }
+      this.part(x, y, 0, 0, 0, { life: 0.12, s0: 10, s1: 14, c: [1, 0.85, 0.6, 0.8], mode: M_GLOW, top: true });
+      this.onSound?.("smokePop", x, y);
+      return;
+    }
+    if (kind === 6) {
+      // Handgranate: kleiner, harter Blitz, Dreck und etwas Rauch
+      this.part(x, y, 0, 0, 0, { life: 0.1, s0: r * 3, s1: r * 4, c: [1, 0.85, 0.55, 1], mode: M_GLOW, top: true });
+      for (let j = 0; j < 8; j++) {
+        const a = rnd() * Math.PI * 2;
+        const sp = 15 + rnd() * 40;
+        this.part(x, y, 1, Math.cos(a) * sp, Math.sin(a) * sp, { vz: 30 + rnd() * 50, g: 260, life: 0.7 + rnd() * 0.3, s0: 1.4, s1: 1.1, c: [0.27, 0.22, 0.16, 1], mode: M_DOT, top: true });
+      }
+      this.part(x, y, 0, 0, 0, { life: 0.25, s0: r, s1: r * 4, c: [0.9, 0.85, 0.75, 0.4], mode: M_RING, top: true });
+      for (let j = 0; j < 3; j++) this.part(x + (rnd() - 0.5) * r, y + (rnd() - 0.5) * r, 3, 3 + (rnd() - 0.5) * 6, -2, { drag: 0.4, life: 2 + rnd() * 2, s0: r, s1: r * 3, c: [0.4, 0.38, 0.34, 0.45], mode: M_SOFT, top: true });
+      this.onSound?.("grenade", x, y);
+      return;
+    }
     const big = kind === 0 || kind === 4 ? 1 : kind === 2 ? 0.7 : 0.45;
     const R = r * (kind === 4 ? 1.4 : 1);
     this.part(x, y, 0, 0, 0, { life: 0.14, s0: R * 3.5, s1: R * 4.5, c: [1, 0.85, 0.55, 1], mode: M_GLOW, top: true });
@@ -447,6 +471,12 @@ export class GlRenderer {
         this.onSound?.("whistle", s.tx, s.ty);
       }
       if (!inView(gx, gy - hgt)) continue;
+      if (s.kind === "grenade") {
+        // Stielhandgranate: kleiner, sich überschlagender Punkt
+        this.shape(gx, gy, 1.6, M_SOFT, 0, 0, 0, 0.35);
+        this.shape(gx, gy - hgt, 1.8, M_BAR, 0.22, 0.2, 0.16, 1, b.time * 14, 0.9);
+        continue;
+      }
       this.shape(gx, gy, 4 + hgt * 0.02, M_SOFT, 0, 0, 0, 0.4);
       if (!s.direct) this.shape(gx, gy - hgt, 7, M_GLOW, 1, 0.8, 0.5, 0.25);
       this.sprite(this.atlas.frames[s.side].shell, gx, gy - hgt, a, 1.6 + hgt * 0.004);
@@ -454,6 +484,9 @@ export class GlRenderer {
 
     // --- Partikel über den Einheiten (Explosionen, Rauch, Feuer)
     this.drawParticles(true, inView);
+
+    // --- Nebelwände
+    this.drawSmoke(b, inView);
 
     // --- Magier schweben über allem
     for (let s = 0; s < 2; s++) {
@@ -470,6 +503,26 @@ export class GlRenderer {
     // Effekte altern lassen
     if (simDt > 0) this.step(simDt);
     this.shake = Math.max(0, this.shake - simDt * 2.5);
+  }
+
+  /** Nebelwolken: mehrere weiche Schwaden je Wolke, die langsam wabern und im Wind treiben */
+  private drawSmoke(b: Battle, inView: (x: number, y: number) => boolean) {
+    for (const sm of b.smokes) {
+      if (!inView(sm.x, sm.y) && !inView(sm.x + sm.r, sm.y) && !inView(sm.x - sm.r, sm.y)) continue;
+      const age = b.time - sm.t0;
+      const fade = Math.min(1, age / 3) * Math.min(1, (sm.until - b.time) / 10);
+      if (fade <= 0) continue;
+      const grow = 0.6 + 0.4 * Math.min(1, age / 4);
+      const seed = sm.t0 * 13.7 + sm.y;
+      for (let k = 0; k < 6; k++) {
+        const ph = seed + k * 2.39;
+        const ox = Math.cos(ph) * sm.r * 0.45 + Math.sin(this.time * 0.3 + ph) * 4;
+        const oy = Math.sin(ph * 1.3) * sm.r * 0.35 + Math.cos(this.time * 0.25 + ph) * 3;
+        const size = sm.r * grow * (1.1 + 0.25 * Math.sin(ph * 3.1));
+        const g = 0.84 + 0.06 * Math.sin(ph * 5);
+        this.shape(sm.x + ox, sm.y + oy, size * 2, M_SOFT, g, g, g * 0.97, 0.32 * fade);
+      }
+    }
   }
 
   private drawUnit(b: Battle, i: number, x: number, y: number, scale: number, style: RenderStyle) {
@@ -524,9 +577,11 @@ export class GlRenderer {
       this.shape(x, y + bob, 20, M_GLOW, mc[0], mc[1], mc[2], 0.55);
       y += bob;
     } else {
-      // Schützen: Haltung je nach Lage
+      // Schützen und Stoßtrupps: Haltung je nach Lage
       const kind = b.terrain.kindAt(x, y);
-      if (b.moving[i]) frame = Math.floor(this.time * 6 + i) % 2 ? "run1" : "run2";
+      const storm = type === UNIT_STORM;
+      if (storm) frame = "storm";
+      if (b.moving[i]) frame = Math.floor(this.time * 6 + i) % 2 ? (storm ? "stormRun1" : "run1") : storm ? "stormRun2" : "run2";
       else if (kind === K_TRENCH || kind === K_BUNKER) frame = "trench";
       else if (b.suppress[i] > 0.4 || b.pinned[i] || b.terrain.coverAt(x, y) > 0.3) frame = "prone";
       if (c.order === "rout") bright *= 0.75 + 0.25 * Math.sin(this.time * 9 + i);
