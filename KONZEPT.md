@@ -89,6 +89,25 @@ Alle Zahlen stehen später an einer Stelle im Code und können leicht angepasst 
 - Die Stärke im Gefecht (lebende Soldaten × Qualität) ist genau die Stärke, die für die Einnahme zählt.
   Wer die Schlacht gut führt, verschiebt also direkt den Balken.
 
+### Ziel für die Gefechte (Ausbau nach dem Kampagnen-Prototyp)
+
+Die Schlachten sollen später richtig gut aussehen und sich glaubwürdig anfühlen.
+
+**Sichtbarkeit**
+- Jeder Schuss sichtbar: Mündungsfeuer, Leuchtspur, Einschlag (Erdspritzer bei Fehlschuss)
+- Treffer erkennbar: Soldat zuckt/fällt, Blut an der Stelle, das **mit der Zeit verblasst**
+- Artillerie: Einschlag, Druckwelle, Erdfontäne, Rauch; Trichter bleiben dauerhaft
+- Magier: sichtbare Zauberstrahlen, Schildblitzen bei Treffern
+
+**Logisches Verhalten**
+- Truppen halten ihre **Position** und kämpfen auf **wirksamer Reichweite** ihrer Waffe, statt
+  wahllos in den Gegner zu rennen
+- Deckung aktiv nutzen: unter Beschuss ducken, von Trichter zu Trichter vorgehen
+- MGs bleiben in befestigten Stellungen, Schützen halten Abstand
+- Sturmangriffe nur auf Befehl oder wenn der Offizier die Lage als günstig einschätzt
+  (z. B. nach Artillerie, gegen geschwächte Stellungen)
+- Verwundete/Fliehende ziehen sich nach hinten zurück, Nachschub rückt geordnet nach
+
 ## Wirtschaft (einfach)
 
 - Wenige Ressourcen: **Gold, Nahrung, Material, Rekruten**
