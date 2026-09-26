@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1914" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%231b1914'/><path d='M0 10l4-2 4 2 4-2 4 2v6H0z' fill='%234d3e2a'/><circle cx='8' cy='5' r='2' fill='%23d9b35f'/></svg>" />
+    <title>Grabenfront</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="stage">
+        <canvas id="bg"></canvas>
+        <canvas id="gl"></canvas>
+        <svg id="overlay"></svg>
+        <div id="flags"></div>
+      </div>
+
+      <header id="topbar">
+        <div class="group">
+          <button id="pause" class="icon" title="Pause (Leertaste)">⏸</button>
+          <button class="speed" data-speed="1">1×</button>
+          <button class="speed" data-speed="2">2×</button>
+          <button class="speed" data-speed="4">4×</button>
+        </div>
+        <div id="clock">00:00</div>
+        <div class="group" id="strength"></div>
+      </header>
+
+      <div id="modebar" hidden>
+        <span id="modetext"></span>
+        <button id="modecancel">Abbrechen</button>
+      </div>
+
+      <footer id="panel">
+        <div id="selinfo"></div>
+        <div class="row" id="orders">
+          <button data-order="hold" title="H">Halten</button>
+          <button data-order="storm" class="danger" title="S">Sturm!</button>
+          <button data-order="retreat" title="R">Rückzug</button>
+        </div>
+        <div class="row" id="support">
+          <button id="arty" title="A">Artillerie</button>
+          <button id="reserve">Reserve</button>
+          <button id="fit" class="icon" title="Ganze Karte">⤢</button>
+        </div>
+        <div id="chips"></div>
+      </footer>
+
+      <div id="dialog" class="dialog"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
