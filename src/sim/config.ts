@@ -81,7 +81,7 @@ export const STATS: Record<number, WeaponStats> = {
     // flache Geschossbahn, bestreicht das Vorfeld: Treffer fallen auf Entfernung weniger ab
     falloff: 0.5,
     suppress: 0.12,
-    hp: 3,
+    hp: 5, // mehrere Mann Bedienung: fällt einer aus, schießt das MG weiter
     walk: 4,
     run: 6,
     fireWhileMoving: false,
