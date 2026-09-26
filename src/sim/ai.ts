@@ -348,8 +348,7 @@ export class BattleAI {
         a.breach = this.veteran ? this.findBreach(b, enemySide, a.lane) : a.lane;
         tanks.forEach((c, k) => b.orderMove(c.id, spread(k, tanks.length, 60, a.breach), enemyFront(a.breach) + fwd * 40));
         if (this.veteran && tanks.length > 0) {
-          // Panzer rollen voraus; Nebel und Sturm erst, wenn sie nah am Graben sind
-          if (arty()) b.callArtillery(this.side, a.breach, enemyFront(a.breach), "he");
+          // Panzer rollen voraus; Nebel und Sturm erst, wenn sie nah am Graben sind (die Batterie bleibt für den Nebel)
           a.stage = "tanks";
           a.timer = 0;
           return;
