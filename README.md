@@ -29,8 +29,20 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
 - Diplomatie: Meinungen, Bündnisse, Krieg erklären, Frieden anbieten. Computer-Nationen handeln
   selbstständig.
 
-**Schlacht** (für jeden Frontpunkt einzeln)
-- Tausende Soldaten, Gräben, Stacheldraht, Trichter, Moral, Artillerie mit Vorwarnzeit, fliegende Magier.
+**Schlacht** (für jeden Frontpunkt einzeln, v0.3)
+- 5 Landschaften: Flandern (Schlamm, Wassertrichter), Champagne (Kreide), Argonnen (Wald),
+  Karpaten (Schnee), Dorfkampf (Ruinen im Niemandsland). Jede Karte ist zufällig erzeugt, mit
+  geschwungenen Grabensystemen, Sappen, Bunkern, Stacheldraht, Hohlwegen, Bächen, Ruinen, Wracks
+  und Minenfeldern.
+- Einzeln erkennbare Pixel-Soldaten (stehend, rennend, liegend, im Graben). Jeder hat einen eigenen
+  Platz, und unter Beschuss geht es von Trichter zu Trichter. Maßstab in Metern.
+- Truppen: Schützen, MGs, Tankgewehre, Flammenwerfer, Panzer (Rhombus-Typ), Feldgeschütze mit
+  sichtbarem Granatenflug, Magier. Dazu Minen, Brände, Gegenbatteriefeuer und Panzer, die
+  Stacheldraht niederwalzen und liegen bleiben können.
+- Effekte: Mündungsfeuer, Leuchtspuren, Erd- und Blutspritzer, Blut, das langsam verblasst,
+  Gefallene, Explosionen mit Druckwelle und Trümmern, Rauch, Kamerawackeln, synthetischer Ton.
+- Drei Darstellungen zum Umschalten (Taste V): Klassisch, Deutlich (Farbmarker für kleine Bildschirme),
+  Punkte (Übersicht).
 - Die Offiziere führen die Schlacht, du kannst jederzeit einzelne Kompanien übernehmen (✋) und
   wieder abgeben.
 - Nachschub marschiert vom hinteren Kartenrand ein. Verluste fließen zurück in die Divisionen der

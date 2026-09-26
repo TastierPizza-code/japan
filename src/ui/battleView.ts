@@ -1,9 +1,11 @@
 import type { Stance } from "../sim/ai.ts";
 import type { Battle, Company } from "../sim/battle.ts";
-import { PLAYER, RESERVE_COOLDOWN, TRENCH_Y, UNIT_MAGE } from "../sim/config.ts";
+import { BLOOD_FADE, METERS_PER_UNIT, PLAYER, RESERVE_COOLDOWN, STATS, UNIT_GUN, UNIT_MAGE, UNIT_TANK } from "../sim/config.ts";
+import { BIOME_NAMES } from "../sim/terrain.ts";
+import { BattleAudio } from "../render/audio.ts";
 import { Camera } from "../render/camera.ts";
-import { GlRenderer } from "../render/glRenderer.ts";
-import { TerrainPainter } from "../render/terrainPainter.ts";
+import { GlRenderer, STYLE_NAMES, type RenderStyle } from "../render/glRenderer.ts";
+import { BloodLayer, TerrainPainter } from "../render/terrainPainter.ts";
 import { STANCE_NAMES, type World } from "../world/world.ts";
 import { bindGestures, watchSize } from "./gestures.ts";
 import { Overlay, shortName } from "./overlay.ts";
@@ -39,9 +41,19 @@ export class BattleView {
   private dpr = Math.min(2, window.devicePixelRatio || 1);
   private chipEls = new Map<number, HTMLButtonElement>();
   private resize: () => void;
+  private blood = new BloodLayer();
+  audio = new BattleAudio();
 
   constructor() {
     this.gl = new GlRenderer($<HTMLCanvasElement>("#gl"));
+    try {
+      const st = localStorage.getItem("grabenfront.style") as RenderStyle | null;
+      if (st && st in STYLE_NAMES) this.gl.style = st;
+    } catch {
+      /* ohne Speicher */
+    }
+    this.gl.onSound = (kind, x, y, big) => this.sound(kind, x, y, big ?? 1);
+    $("#styleBtn").addEventListener("click", () => this.cycleStyle());
     this.resize = watchSize(this.stage, [this.bg, $<HTMLCanvasElement>("#gl")], this.dpr, this.cam);
     bindGestures(this.stage, () => this.cam, (x, y) => this.tap(x, y));
     document.querySelectorAll<HTMLButtonElement>("#orders button").forEach((b) =>
@@ -66,9 +78,12 @@ export class BattleView {
 
   open(ctx: BattleContext) {
     this.ctx = ctx;
-    this.painter = new TerrainPainter(ctx.battle.terrain);
-    this.painter.corpses(ctx.battle.corpses);
+    this.painter = new TerrainPainter(ctx.battle.terrain, this.gl.atlas);
+    this.painter.replay(ctx.battle.corpses, ctx.battle.scars);
+    this.blood = new BloodLayer();
     ctx.battle.clearEvents();
+    this.gl.viewerSide = PLAYER;
+    $("#styleBtn").textContent = `Darstellung: ${STYLE_NAMES[this.gl.style]}`;
     this.gl.reset();
     this.selected = -1;
     this.setMode("none");
@@ -101,10 +116,25 @@ export class BattleView {
     if (!this.ctx || !this.painter) return;
     const b = this.battle;
     const e = b.events;
-    for (let i = 0; i < e.deaths.length; i += 4) this.painter.corpse(e.deaths[i], e.deaths[i + 1], e.deaths[i + 2]);
-    for (let i = 0; i < e.craters.length; i += 3) this.painter.crater(e.craters[i], e.craters[i + 1], e.craters[i + 2]);
-    this.gl.ingest(b);
+    const painter = this.painter;
+    for (let i = 0; i < e.deaths.length; i += 5) {
+      const type = e.deaths[i + 3];
+      if (type === UNIT_TANK || type === UNIT_GUN || type === UNIT_MAGE) continue;
+      painter.corpse(e.deaths[i], e.deaths[i + 1], e.deaths[i + 2], e.deaths[i + 4]);
+    }
+    for (let i = 0; i < e.craters.length; i += 3) painter.crater(e.craters[i], e.craters[i + 1], e.craters[i + 2]);
+    for (let i = 0; i < e.tracks.length; i += 3) painter.track(e.tracks[i], e.tracks[i + 1], e.tracks[i + 2]);
+    for (let i = 0; i < e.wrecks.length; i += 3) painter.wreck(e.wrecks[i], e.wrecks[i + 1], e.wrecks[i + 2], 1);
+    this.gl.ingest(b, (x, y, size) => this.blood.splat(x, y, size));
     b.clearEvents();
+    this.blood.fade(simDt, BLOOD_FADE);
+
+    // Kamerawackeln bei nahen Explosionen
+    const shake = this.gl.shake * 3 / Math.max(0.5, this.cam.zoom);
+    const sx = (Math.random() - 0.5) * shake;
+    const sy = (Math.random() - 0.5) * shake;
+    this.cam.x += sx;
+    this.cam.y += sy;
 
     const ctx = this.bgCtx;
     const z = this.cam.zoom * this.dpr;
@@ -113,10 +143,58 @@ export class BattleView {
     ctx.fillRect(0, 0, this.bg.width, this.bg.height);
     ctx.imageSmoothingEnabled = this.cam.zoom < 1;
     ctx.setTransform(z, 0, 0, z, -this.cam.x * z, -this.cam.y * z);
-    ctx.drawImage(this.painter.canvas, 0, 0);
+    ctx.drawImage(painter.canvas, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.blood.canvas, 0, 0, this.blood.canvas.width / BloodLayer.SCALE, this.blood.canvas.height / BloodLayer.SCALE);
     this.gl.selected = this.selected;
     this.gl.render(b, this.cam, this.dpr, simDt);
     this.overlay.update(b, this.cam, this.selected);
+    this.cam.x -= sx;
+    this.cam.y -= sy;
+    this.updateScale();
+  }
+
+  /** Maßstabsleiste unten links */
+  private updateScale() {
+    const el = $("#scalebar");
+    const pxPerMeter = this.cam.zoom / METERS_PER_UNIT;
+    let meters = 10;
+    for (const m of [10, 25, 50, 100, 200, 500]) {
+      meters = m;
+      if (m * pxPerMeter >= 70) break;
+    }
+    el.style.width = `${Math.round(meters * pxPerMeter)}px`;
+    el.dataset.label = `${meters} m`;
+  }
+
+  private sound(kind: string, x: number, y: number, big: number) {
+    const cam = this.cam;
+    const halfW = cam.viewW / cam.zoom / 2;
+    const halfH = cam.viewH / cam.zoom / 2;
+    const cx = cam.x + halfW;
+    const cy = cam.y + halfH;
+    const reach = Math.max(halfW, halfH) * 1.6 + 150;
+    const d = Math.hypot(x - cx, y - cy);
+    // Weit herausgezoomt: alles etwas leiser, sonst wird es zu laut bei Tausenden Schützen
+    const zoomVol = Math.min(1, 0.35 + cam.zoom * 0.35);
+    const vol = Math.max(0, 1 - d / reach) * zoomVol;
+    this.audio.play(kind, vol, (x - cx) / halfW, big);
+  }
+
+  cycleStyle() {
+    const order: RenderStyle[] = ["klassisch", "deutlich", "punkte"];
+    this.gl.style = order[(order.indexOf(this.gl.style) + 1) % order.length];
+    try {
+      localStorage.setItem("grabenfront.style", this.gl.style);
+    } catch {
+      /* egal */
+    }
+    $("#styleBtn").textContent = `Darstellung: ${STYLE_NAMES[this.gl.style]}`;
+  }
+
+  /** Name der Landschaft für die Anzeige */
+  biomeName() {
+    return this.ctx ? BIOME_NAMES[this.ctx.battle.terrain.biome] : "";
   }
 
   // ---------------------------------------------------------------- Befehle
@@ -197,6 +275,7 @@ export class BattleView {
     else if (k === "r") this.order("retreat");
     else if (k === "o") this.order("officer");
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
+    else if (k === "v") this.cycleStyle();
     else if (k === "escape" && (this.mode !== "none" || this.selected >= 0)) {
       if (this.mode !== "none") this.setMode("none");
       else this.select(-1);
@@ -272,7 +351,7 @@ export class BattleView {
     arty.textContent =
       side.artyMax === 0
         ? "Keine Artillerie"
-        : `Artillerie (${side.artyCharges})` + (side.artyCharges < side.artyMax ? ` ${Math.ceil(side.artyTimer)}s` : "");
+        : `Artillerie ${side.artyCharges}/${side.artyMax}` + (side.artyCharges < side.artyMax ? ` · ${Math.ceil(side.artyTimer)}s` : "");
     arty.disabled = side.artyCharges === 0 && this.mode !== "arty";
     const res = $<HTMLButtonElement>("#reserve");
     res.textContent = `Reserve (${side.reserves})` + (side.reserveCooldown > 0 ? ` ${Math.ceil(side.reserveCooldown)}s` : "");
@@ -309,17 +388,23 @@ export class BattleView {
       chip.classList.toggle("sel", c.id === this.selected);
       const color = moraleColor(c);
       const who = world ? (c.manual ? " ✋" : "") : "";
-      chip.innerHTML = `<span style="color:${color}">■</span> ${shortName(c)}${c.type === UNIT_MAGE ? " Magier" : ""}${who}<small>${c.alive} · ${orderText(c)}</small>`;
+      chip.innerHTML = `<span style="color:${color}">■</span> ${shortName(c)}${c.type === UNIT_MAGE ? " Magier" : ""}${who}<small>${c.alive} · ${orderText(c, b)}</small>`;
     }
   }
 
   private describe(c: Company) {
     const bar = (v: number, col: string) =>
       `<span class="meter"><i style="width:${Math.max(0, v)}%;background:${col}"></i></span>`;
-    const second =
-      c.type === UNIT_MAGE
-        ? `Mana ${bar(c.mana, "#7ff0ff")} · Reichweite 230`
-        : `Moral ${bar(c.morale, moraleColor(c))} · ${orderText(c)}`;
+    const b = this.battle;
+    const st = STATS[c.type];
+    const range = `Reichweite ${Math.round(st.range * METERS_PER_UNIT)} m`;
+    let second: string;
+    if (c.type === UNIT_MAGE) second = `Mana ${bar(c.mana, "#7ff0ff")} · ${range}`;
+    else if (c.type === UNIT_TANK || c.type === UNIT_GUN) {
+      const hp = c.members.filter((m) => b.alive[m]).map((m) => Math.round((b.hp[m] / st.hp) * 100));
+      const ready = c.type === UNIT_GUN ? (c.readyAt <= b.time ? " · feuerbereit" : ` · lädt ${Math.ceil(c.readyAt - b.time)}s`) : "";
+      second = `Zustand ${hp.map((h) => `${h}%`).join(" / ")}${ready} · ${range}`;
+    } else second = `Moral ${bar(c.morale, moraleColor(c))} · ${orderText(c, b)} · ${range}`;
     const hint =
       this.mode === "storm"
         ? ""
@@ -330,7 +415,8 @@ export class BattleView {
             : this.ctx?.world
               ? " · Offizier führt"
               : " · Karte antippen = Position";
-    return `<b>${c.name}</b> · ${c.alive}/${c.initial} Mann${hint}<br>${second}`;
+    const unit = c.type === UNIT_TANK ? "Panzer" : c.type === UNIT_GUN ? "Geschütze" : c.type === UNIT_MAGE ? "Magier" : "Mann";
+    return `<b>${c.name}</b> <small>(${st.name})</small> · ${c.alive}/${c.initial} ${unit}${hint}<br>${second}`;
   }
 }
 
@@ -340,7 +426,7 @@ export function moraleColor(c: Company) {
   return c.morale > 60 ? "var(--ok)" : c.morale > 35 ? "var(--warn)" : "var(--bad)";
 }
 
-function orderText(c: Company) {
+function orderText(c: Company, b: Battle) {
   switch (c.order) {
     case "storm":
       return "stürmt";
@@ -352,7 +438,8 @@ function orderText(c: Company) {
       if (c.type === UNIT_MAGE) return c.mana < 20 ? "erschöpft" : "einsatzbereit";
       const moving = Math.hypot(c.cx - c.tx, c.cy - c.ty) > 15;
       if (moving) return "rückt vor";
-      return Math.abs(c.cy - TRENCH_Y[PLAYER]) < 40 ? "hält Graben" : "hält Stellung";
+      if (c.type === UNIT_GUN) return "in Feuerstellung";
+      return Math.abs(c.cy - b.terrain.frontY(c.side, c.cx)) < 40 ? "hält Graben" : "hält Stellung";
     }
   }
 }

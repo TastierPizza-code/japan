@@ -1,5 +1,5 @@
 import type { Battle, Company } from "../sim/battle.ts";
-import { ARTY_SPREAD, OBJECTIVE_RADIUS, PLAYER, UNIT_MAGE, UNIT_MG } from "../sim/config.ts";
+import { ARTY_SPREAD, OBJECTIVE_RADIUS, PLAYER, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_TANK } from "../sim/config.ts";
 import type { Camera } from "../render/camera.ts";
 
 const PC = "#8cb8f2";
@@ -68,7 +68,7 @@ export class Overlay {
       }
       parts.push(`<circle cx="${t.x}" cy="${t.y}" r="7" fill="none" stroke="${col}" stroke-width="2"/>`);
       if (sel.type === UNIT_MAGE) {
-        parts.push(`<circle cx="${a.x}" cy="${a.y}" r="${230 * z}" fill="none" stroke="#7ff0ff" stroke-opacity=".3"/>`);
+        parts.push(`<circle cx="${a.x}" cy="${a.y}" r="${STATS[UNIT_MAGE].range * z}" fill="none" stroke="#7ff0ff" stroke-opacity=".3"/>`);
       }
     }
     this.svg.innerHTML = parts.join("");
@@ -104,7 +104,9 @@ export class Overlay {
       return;
     }
     const p = cam.toScreen(c.cx, c.cy);
-    const offset = c.side === PLAYER ? 16 : -30;
+    // Fahne neben die Truppe setzen, nicht darauf – bei starkem Zoom etwas weiter weg
+    const off = Math.max(16, STATS[c.type].radius * cam.zoom * 1.6);
+    const offset = c.side === PLAYER ? off : -off - 14;
     f.el.style.display = "";
     f.el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y + offset)}px) translateX(-50%)`;
     f.bar.style.width = `${Math.max(0, (c.alive / c.initial) * 100)}%`;
@@ -115,7 +117,11 @@ export class Overlay {
 
 export function shortName(c: Company) {
   if (c.type === UNIT_MAGE) return "✦";
-  if (c.type === UNIT_MG) return c.side === PLAYER ? c.name.replace("MG-Zug ", "MG ") : "MG";
+  if (c.type === UNIT_TANK) return "▰";
+  if (c.type === UNIT_GUN) return "Art";
+  if (c.type === UNIT_AT) return "AT";
+  if (c.type === UNIT_FLAME) return "🔥";
+  if (c.type === UNIT_MG) return c.side === PLAYER && c.name.startsWith("MG-Zug") ? c.name.replace("MG-Zug ", "MG ") : "MG";
   const m = c.name.match(/^\d+(\.\d+)?/);
   return m ? m[0] : c.name.slice(0, 3);
 }

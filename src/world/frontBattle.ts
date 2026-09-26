@@ -2,18 +2,22 @@ import { BattleAI } from "../sim/ai.ts";
 import { Battle } from "../sim/battle.ts";
 import {
   COMPANY_SIZE,
+  GUN_Y,
   MG_PER_SECTION,
-  SUPPORT_Y,
-  TRENCH_Y,
+  REAR_Y,
+  UNIT_AT,
+  UNIT_FLAME,
+  UNIT_GUN,
   UNIT_MAGE,
   UNIT_MG,
   UNIT_RIFLE,
-  REAR_Y,
+  UNIT_TANK,
+  WORLD_W,
 } from "../sim/config.ts";
 import { FIELD_RIFLE_COMPANIES } from "./config.ts";
 import type { Division, FrontPoint, World } from "./world.ts";
 
-const LANES = [200, 600, 1000];
+const LANES = [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6];
 const UNVIEWED_STEP = 0.2;
 
 /**
@@ -75,12 +79,12 @@ export class FrontBattle {
       let sum = 0;
       let n = 0;
       for (const c of b.companies) {
-        if (c.side !== bs || c.alive <= 0 || c.type === UNIT_MAGE) continue;
+        if (c.side !== bs || c.alive <= 0 || c.type === UNIT_MAGE || c.type === UNIT_GUN || c.type === UNIT_TANK) continue;
         sum += c.morale * c.alive;
         n += c.alive;
       }
       let f = n > 0 ? 0.6 + 0.4 * (sum / n / 100) : 1;
-      const held = b.objectives.filter((o) => o.owner === bs && o.y === TRENCH_Y[1 - bs]).length;
+      const held = b.objectives.filter((o) => o.owner === bs && Math.abs(o.y - b.terrain.frontY(1 - bs, o.x)) < 30).length;
       f *= 1 + 0.1 * held;
       out[this.sideMap[bs]] = f;
     }
@@ -108,69 +112,75 @@ export class FrontBattle {
   private sync(world: World, point: FrontPoint, initial: boolean) {
     this.syncLosses(world, point);
     const b = this.battle;
+    const t = b.terrain;
     for (let bs = 0; bs < 2; bs++) {
       const divs = world.divisionsAt(point.id, this.sideMap[bs]).sort((x, y) => x.id - y.id);
       const onField = new Map<number, number>();
       let rifles = 0;
+      const count: Record<number, number> = {};
       for (const c of b.companies) {
         if (c.side !== bs || c.alive <= 0) continue;
         onField.set(c.division, (onField.get(c.division) ?? 0) + c.alive);
         if (c.type === UNIT_RIFLE && c.order !== "rout") rifles++;
+        count[c.type] = (count[c.type] ?? 0) + 1;
       }
-      // Artillerie steht hinter der Karte: bestimmt nur die Zahl der Feuerschläge
-      const batteries = divs.filter((d) => d.kind === "artillery").reduce((s, d) => s + d.soldiers, 0);
-      const side = b.sides[bs];
-      side.artyMax = Math.min(6, batteries);
-      if (initial) side.artyCharges = side.artyMax;
-      side.artyCharges = Math.min(side.artyCharges, side.artyMax);
+      const slotOf = (type: number) => count[type] ?? 0;
+      const bump = (type: number) => (count[type] = (count[type] ?? 0) + 1);
+      const mgSpots = b.mgSpots(bs);
 
-      let slot = b.companies.filter((c) => c.side === bs && c.type === UNIT_RIFLE).length;
-      let mgSlot = b.companies.filter((c) => c.side === bs && c.type === UNIT_MG).length;
       for (const d of divs) {
         let spare = d.soldiers - (onField.get(d.id) ?? 0);
         let k = b.companies.filter((c) => c.division === d.id).length;
         const num = divisionNumber(d);
+        const spawn = (type: number, name: string, x: number, y: number, size: number) => {
+          const c = b.spawnCompany(bs, type, name, x, y, size, d.id, initial || type === UNIT_GUN);
+          this.lastAlive.set(c.id, c.alive);
+          spare -= size;
+          bump(type);
+        };
         if (d.kind === "infantry") {
           while (spare >= 30 && rifles < FIELD_RIFLE_COMPANIES) {
-            const size = Math.min(COMPANY_SIZE, spare);
-            const pos = riflePosition(slot, bs, initial);
-            this.spawn(bs, UNIT_RIFLE, `${num}.${++k}`, pos, size, d, initial);
-            spare -= size;
+            const slot = b.companies.filter((c) => c.side === bs && c.type === UNIT_RIFLE).length;
+            const x = LANES[slot % 3] + (slot >= 6 ? 140 : slot >= 3 ? -70 : 0);
+            const y = initial && slot < 3 ? t.frontY(bs, x) : t.supportY(bs, x);
+            spawn(UNIT_RIFLE, `${num}.${++k}`, x, y, Math.min(COMPANY_SIZE, spare));
             rifles++;
-            slot++;
           }
         } else if (d.kind === "mg") {
           while (spare >= 1) {
-            const size = Math.min(MG_PER_SECTION, spare);
-            const x = mgSlot % 2 === 0 ? 400 : 800;
-            this.spawn(bs, UNIT_MG, `MG ${num}.${++k}`, { x: x + Math.floor(mgSlot / 2) * 60, y: TRENCH_Y[bs] }, size, d, initial);
-            spare -= size;
-            mgSlot++;
+            const slot = slotOf(UNIT_MG);
+            const spot = mgSpots[slot % mgSpots.length];
+            spawn(UNIT_MG, `MG ${num}.${++k}`, spot.x + Math.floor(slot / mgSpots.length) * 50, spot.y, Math.min(MG_PER_SECTION, spare));
+          }
+        } else if (d.kind === "artillery") {
+          if (spare >= 1) {
+            const slot = slotOf(UNIT_GUN);
+            spawn(UNIT_GUN, `${num}. Batterie`, WORLD_W / 2 + ((slot % 3) - 1) * 380, GUN_Y[bs], spare);
+          }
+        } else if (d.kind === "tank") {
+          if (spare >= 1) {
+            const slot = slotOf(UNIT_TANK);
+            const x = LANES[slot % 3];
+            spawn(UNIT_TANK, `Pz ${num}`, x, (t.supportY(bs, x) + GUN_Y[bs]) / 2, spare);
+          }
+        } else if (d.kind === "at") {
+          if (spare >= 1) {
+            const slot = slotOf(UNIT_AT);
+            const x = LANES[(slot + 1) % 3] + 90;
+            spawn(UNIT_AT, `AT ${num}`, x, t.frontY(bs, x), spare);
+          }
+        } else if (d.kind === "flame") {
+          if (spare >= 1) {
+            const slot = slotOf(UNIT_FLAME);
+            const x = LANES[slot % 3] - 90;
+            spawn(UNIT_FLAME, `Fl ${num}`, x, t.supportY(bs, x), spare);
           }
         } else if (d.kind === "mage") {
-          if (spare >= 1) this.spawn(bs, UNIT_MAGE, `✦ ${num}`, { x: 600, y: REAR_Y[bs] }, spare, d, initial);
+          if (spare >= 1) spawn(UNIT_MAGE, `✦ ${num}`, WORLD_W / 2, REAR_Y[bs], spare);
         }
       }
     }
   }
-
-  private spawn(
-    bs: number,
-    type: number,
-    name: string,
-    pos: { x: number; y: number },
-    size: number,
-    d: Division,
-    teleport: boolean,
-  ) {
-    const c = this.battle.spawnCompany(bs, type, name, pos.x, pos.y, size, d.id, teleport);
-    this.lastAlive.set(c.id, c.alive);
-  }
-}
-
-function riflePosition(slot: number, side: number, initial: boolean) {
-  if (initial && slot < 3) return { x: LANES[slot], y: TRENCH_Y[side] };
-  return { x: LANES[slot % 3] + (slot >= 6 ? 120 : 0), y: SUPPORT_Y[side] };
 }
 
 function divisionNumber(d: Division) {

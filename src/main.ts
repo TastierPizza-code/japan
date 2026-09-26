@@ -2,6 +2,7 @@ import "./style.css";
 import { BattleAI } from "./sim/ai.ts";
 import { Battle } from "./sim/battle.ts";
 import { ENEMY, PLAYER, TICK } from "./sim/config.ts";
+import { BIOME_NAMES, BIOMES, type Biome } from "./sim/terrain.ts";
 import { CampaignView } from "./campaign/campaignView.ts";
 import { BattleView } from "./ui/battleView.ts";
 import { decodeMap, type GameMap, type MapFile } from "./world/mapData.ts";
@@ -34,6 +35,16 @@ class App {
       b.addEventListener("click", () => this.setSpeed(+b.dataset.speed!)),
     );
     $("#back").addEventListener("click", () => this.backToMap());
+    const sound = $("#soundBtn");
+    const syncSound = () => (sound.textContent = this.battleView.audio.enabled ? "🔊" : "🔇");
+    sound.addEventListener("click", () => {
+      this.battleView.audio.unlock();
+      this.battleView.audio.toggle();
+      syncSound();
+    });
+    syncSound();
+    // Browser erlauben Ton erst nach einer Berührung/einem Klick
+    window.addEventListener("pointerdown", () => this.battleView.audio.unlock(), { capture: true });
     $("#toasts").addEventListener("click", (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-point]");
       if (t && this.campaign) {
@@ -82,7 +93,22 @@ class App {
     d.querySelectorAll<HTMLButtonElement>("[data-nation]").forEach((b) =>
       b.addEventListener("click", () => this.startCampaign(Number(b.dataset.nation))),
     );
-    $("#skirmish").addEventListener("click", () => this.startSkirmish());
+    $("#skirmish").addEventListener("click", () => this.skirmishMenu());
+  }
+
+  skirmishMenu() {
+    const d = $("#dialog");
+    d.innerHTML = `<div class="card">
+      <h1>Schnelles Gefecht</h1>
+      <h2>Beide Seiten mit Infanterie, MGs, Tankgewehren, Flammenwerfern, Panzern, einer Batterie Feldgeschütze und Magiern.</h2>
+      <div class="list">${BIOMES.map((b) => `<button class="rowbtn" data-biome="${b}"><span>${BIOME_NAMES[b]}</span></button>`).join("")}
+        <button class="rowbtn primary" data-biome="random"><span>Zufällige Landschaft</span></button>
+      </div>
+      <button id="menuBack" class="wide">Zurück</button></div>`;
+    d.querySelectorAll<HTMLButtonElement>("[data-biome]").forEach((b) =>
+      b.addEventListener("click", () => this.startSkirmish(b.dataset.biome === "random" ? undefined : (b.dataset.biome as Biome))),
+    );
+    $("#menuBack").addEventListener("click", () => this.menu());
   }
 
   startCampaign(player: number) {
@@ -100,12 +126,13 @@ class App {
     this.setSpeed(1);
   }
 
-  startSkirmish() {
+  startSkirmish(biome?: Biome) {
     $("#dialog").hidden = true;
-    const battle = new Battle((Math.random() * 1e9) | 0);
+    const battle = new Battle((Math.random() * 1e9) | 0, { biome });
     this.skirmish = { battle, ai: new BattleAI(ENEMY), shown: false };
     this.battleView.open({ battle, spectator: false });
     this.view = "battle";
+    this.toast(this.battleView.biomeName(), "info");
     this.setSpeed(1);
   }
 

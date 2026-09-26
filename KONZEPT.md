@@ -89,7 +89,7 @@ Alle Zahlen stehen später an einer Stelle im Code und können leicht angepasst 
 - Die Stärke im Gefecht (lebende Soldaten × Qualität) ist genau die Stärke, die für die Einnahme zählt.
   Wer die Schlacht gut führt, verschiebt also direkt den Balken.
 
-### Ziel für die Gefechte (Ausbau nach dem Kampagnen-Prototyp)
+### Ziel für die Gefechte (erste Ausbaustufe umgesetzt in v0.3)
 
 Die Schlachten sollen später richtig gut aussehen und sich glaubwürdig anfühlen.
 

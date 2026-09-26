@@ -31,7 +31,7 @@ export const BAR_DECAY = 2;
 
 // ------------------------------------------------------------ Truppen
 
-export type UnitKind = "infantry" | "mg" | "artillery" | "mage";
+export type UnitKind = "infantry" | "mg" | "artillery" | "mage" | "tank" | "at" | "flame";
 
 export interface UnitSpec {
   name: string;
@@ -68,11 +68,38 @@ export const UNITS: Record<UnitKind, UnitSpec> = {
   artillery: {
     name: "Artillerie-Batterie",
     short: "Art",
-    size: 1,
-    power: 200,
+    size: 4,
+    power: 55,
     cost: { gold: 80, material: 120, recruits: 150 },
     trainTime: 240,
     food: 0.3,
+  },
+  tank: {
+    name: "Panzer-Abteilung",
+    short: "Pz",
+    size: 3,
+    power: 180,
+    cost: { gold: 180, material: 260, recruits: 60 },
+    trainTime: 360,
+    food: 0.2,
+  },
+  at: {
+    name: "Tankgewehr-Trupp",
+    short: "AT",
+    size: 8,
+    power: 14,
+    cost: { gold: 40, material: 50, recruits: 40 },
+    trainTime: 150,
+    food: 0.05,
+  },
+  flame: {
+    name: "Flammenwerfer-Trupp",
+    short: "Fl",
+    size: 10,
+    power: 10,
+    cost: { gold: 50, material: 60, recruits: 40 },
+    trainTime: 150,
+    food: 0.05,
   },
   mage: {
     name: "Magier-Trupp",

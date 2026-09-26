@@ -36,9 +36,12 @@ export class WorldAI {
     const atWar = w.enemiesOf(n).length > 0;
     const r = w.rng.next();
     let kind: UnitKind = "infantry";
-    if (r < 0.12 && nat.res.gold > 500) kind = "mage";
+    if (r < 0.1 && nat.res.gold > 500) kind = "mage";
+    else if (r < 0.16 && nat.res.material > 400) kind = "tank";
     else if (r < 0.3) kind = "artillery";
-    else if (r < 0.45) kind = "mg";
+    else if (r < 0.42) kind = "mg";
+    else if (r < 0.48) kind = "at";
+    else if (r < 0.53) kind = "flame";
     // Im Frieden sparsamer: Rücklage behalten
     const c = UNITS[kind].cost;
     const reserve = atWar ? 1 : 2.5;

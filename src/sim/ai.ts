@@ -1,7 +1,7 @@
 import type { Battle, Company } from "./battle.ts";
-import { FORWARD, TRENCH_Y, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, WIRE_Y } from "./config.ts";
+import { FORWARD, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_TANK, WORLD_W } from "./config.ts";
 
-const LANES = [200, 600, 1000];
+const LANES = [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6];
 
 /** Haltung eines KI-Offiziers für eine Flanke. */
 export type Stance = "hold" | "defensive" | "balanced" | "aggressive";
@@ -17,7 +17,7 @@ interface Attack {
 }
 
 export function laneOf(x: number) {
-  return x < 400 ? 0 : x < 800 ? 1 : 2;
+  return x < WORLD_W / 3 ? 0 : x < (WORLD_W * 2) / 3 ? 1 : 2;
 }
 
 /**
@@ -57,6 +57,7 @@ export class BattleAI {
 
     this.reserves(b);
     this.defend(b, own);
+    this.antiTank(b, own, foe);
     this.offense(b, own, foe);
     this.artillery(b, own, foe);
     this.mages(b, own, foe);
@@ -67,42 +68,47 @@ export class BattleAI {
     if (s.reserves > 0 && b.groundStrength(this.side) < s.initialStrength * 0.65) b.callReserve(this.side);
   }
 
+  private front(b: Battle, x: number) {
+    return b.terrain.frontY(this.side, x);
+  }
+
   private defend(b: Battle, own: Company[]) {
     const busy = new Set(this.attack?.units ?? []);
-    const trenchY = TRENCH_Y[this.side];
     for (const o of b.objectives) {
       if (this.stances[laneOf(o.x)] === "hold") continue;
       const ours = o.owner === this.side;
       const threatened = ours && o.capturer >= 0;
-      const lost = !ours && o.y === trenchY;
+      const lost = !ours && Math.abs(o.y - this.front(b, o.x)) < 40;
       if (!threatened && !lost) continue;
       const helper = own
-        .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 55 && !busy.has(c.id))
+        .filter((c) => (c.type === UNIT_RIFLE || c.type === UNIT_FLAME) && c.order === "advance" && c.morale > 55 && !busy.has(c.id))
         .sort((a, c) => dist(a, o) - dist(c, o))[0];
-      if (helper && dist(helper, o) < 500) {
+      if (helper && dist(helper, o) < 600) {
         b.orderStorm(helper.id, o.x, o.y);
         busy.add(helper.id);
       }
     }
     // „Halten“: alles, was vor dem eigenen Draht steht, zurück in den Graben
     for (const c of own) {
-      if (busy.has(c.id) || c.type === UNIT_MAGE || c.order !== "advance") continue;
+      if (busy.has(c.id) || c.type === UNIT_MAGE || c.type === UNIT_GUN || c.order !== "advance") continue;
       if (this.stances[laneOf(c.cx)] !== "hold") continue;
-      if ((c.cy - WIRE_Y[this.side]) * FORWARD[this.side] > 20) {
-        b.orderMove(c.id, c.cx, trenchY);
+      if ((c.cy - b.terrain.wireY(this.side, c.cx)) * FORWARD[this.side] > 20) {
+        const y = this.front(b, c.cx);
+        b.orderMove(c.id, c.cx, y);
         c.homeX = c.cx;
-        c.homeY = trenchY;
+        c.homeY = y;
       }
     }
     // Leere Frontabschnitte wieder besetzen
     for (const lane of LANES) {
+      const fy = this.front(b, lane);
       const manned = b.companies.some(
         (c) =>
           c.side === this.side &&
           c.alive > 0 &&
-          c.type !== UNIT_MAGE &&
-          Math.abs(c.cx - lane) < 180 &&
-          Math.abs(c.cy - trenchY) < 60,
+          (c.type === UNIT_RIFLE || c.type === UNIT_MG) &&
+          Math.abs(c.cx - lane) < 220 &&
+          Math.abs(c.cy - fy) < 70,
       );
       if (manned) continue;
       const spare = own
@@ -111,22 +117,36 @@ export class BattleAI {
             c.type === UNIT_RIFLE &&
             c.order === "advance" &&
             !busy.has(c.id) &&
-            Math.abs(c.cy - trenchY) > 100 &&
-            behindFront(c, this.side),
+            Math.abs(c.cy - this.front(b, c.cx)) > 100 &&
+            (c.cy - this.front(b, c.cx)) * FORWARD[this.side] < 0,
         )
         .sort((a, c) => Math.abs(a.cx - lane) - Math.abs(c.cx - lane))[0];
       if (spare) {
-        b.orderMove(spare.id, lane, trenchY);
+        b.orderMove(spare.id, lane, fy);
         spare.homeX = lane;
-        spare.homeY = trenchY;
+        spare.homeY = fy;
         busy.add(spare.id);
+      }
+    }
+  }
+
+  /** Tankgewehre dorthin, wo feindliche Panzer durchbrechen */
+  private antiTank(b: Battle, own: Company[], foe: Company[]) {
+    const tanks = foe.filter((c) => c.type === UNIT_TANK);
+    for (const at of own.filter((c) => c.type === UNIT_AT && c.order === "advance")) {
+      const near = tanks.sort((a, c) => dist(a, { x: at.cx, y: at.cy }) - dist(c, { x: at.cx, y: at.cy }))[0];
+      if (near && dist(near, { x: at.cx, y: at.cy }) < 700) {
+        // Stellung in Deckung zwischen Panzer und eigener Front
+        const tx = near.cx;
+        const ty = this.front(b, tx);
+        if (Math.hypot(at.tx - tx, at.ty - ty) > 60) b.orderMove(at.id, tx, ty);
       }
     }
   }
 
   private offense(b: Battle, own: Company[], foe: Company[]) {
     const fwd = FORWARD[this.side];
-    const enemyTrench = TRENCH_Y[1 - this.side];
+    const enemySide = 1 - this.side;
     if (!this.attack) {
       const aggr = this.maxAggression();
       if (this.attackWait > 0 || aggr === 0) return;
@@ -136,8 +156,10 @@ export class BattleAI {
       for (let l = 0; l < LANES.length; l++) {
         const a = AGGRESSION[this.stances[l]];
         if (a === 0) continue;
-        const mine = strengthNear(own, LANES[l], 250, (c) => c.type === UNIT_RIFLE && c.morale > 60);
-        const theirs = strengthNear(foe, LANES[l], 250, (c) => c.type !== UNIT_MAGE) + 1;
+        const mine =
+          strengthNear(own, LANES[l], 300, (c) => c.type === UNIT_RIFLE && c.morale > 60) +
+          strengthNear(own, LANES[l], 600, (c) => c.type === UNIT_TANK) * 60;
+        const theirs = strengthNear(foe, LANES[l], 300, (c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN) + 1;
         const score = (mine / theirs) * a;
         if (score > bestScore) {
           bestScore = score;
@@ -149,16 +171,18 @@ export class BattleAI {
         return;
       }
       const lane = LANES[best];
-      const units = own
-        .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 60 && Math.abs(c.cx - lane) < 250)
+      const infantry = own
+        .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 60 && Math.abs(c.cx - lane) < 300)
         .sort((a, c) => c.alive - a.alive)
-        .slice(0, 2)
-        .map((c) => c.id);
-      if (units.length === 0) {
+        .slice(0, 2);
+      if (infantry.length === 0) {
         this.attackWait = 30;
         return;
       }
-      this.attack = { lane, stage: "prep", timer: 0, units };
+      const support = own.filter(
+        (c) => (c.type === UNIT_TANK || c.type === UNIT_FLAME) && c.order === "advance" && Math.abs(c.cx - lane) < 600,
+      );
+      this.attack = { lane, stage: "prep", timer: 0, units: [...infantry, ...support].map((c) => c.id) };
     }
 
     const a = this.attack;
@@ -173,31 +197,39 @@ export class BattleAI {
     }
     a.timer += 3;
     const units = a.units.map((id) => b.companies[id]).filter((c) => c.alive > 0 && c.order !== "rout" && !c.manual);
-    if (units.length === 0) {
+    if (!units.some((c) => c.type === UNIT_RIFLE)) {
       this.endAttack(b);
       return;
     }
-    const jumpY = enemyTrench - fwd * 360;
+    const enemyFront = b.terrain.frontY(enemySide, a.lane);
+    const jumpY = enemyFront - fwd * 380;
+    const spread = (k: number, n: number, w: number) => a.lane + (k - (n - 1) / 2) * w;
     if (a.stage === "prep") {
       if (b.sides[this.side].artyCharges > 0) {
-        b.callArtillery(this.side, a.lane, enemyTrench);
+        b.callArtillery(this.side, a.lane, enemyFront);
         this.artyWait = 25;
       }
-      units.forEach((c, k) => b.orderMove(c.id, a.lane + (k - (units.length - 1) / 2) * 150, jumpY));
+      const inf = units.filter((c) => c.type !== UNIT_TANK);
+      inf.forEach((c, k) => b.orderMove(c.id, spread(k, inf.length, 170), jumpY));
+      // Panzer fahren vorneweg
+      units.filter((c) => c.type === UNIT_TANK).forEach((c) => b.orderMove(c.id, a.lane, jumpY + fwd * 60));
       a.stage = "approach";
       a.timer = 0;
     } else if (a.stage === "approach") {
-      const ready = units.every((c) => Math.abs(c.cy - jumpY) < 40);
-      if (ready || a.timer > 90) {
-        if (b.sides[this.side].artyCharges > 0) b.callArtillery(this.side, a.lane, enemyTrench);
+      const ready = units.filter((c) => c.type === UNIT_RIFLE).every((c) => Math.abs(c.cy - jumpY) < 50);
+      if (ready || a.timer > 100) {
+        if (b.sides[this.side].artyCharges > 0) b.callArtillery(this.side, a.lane, enemyFront);
+        units.filter((c) => c.type === UNIT_TANK).forEach((c) => b.orderMove(c.id, a.lane, enemyFront + fwd * 40));
         a.stage = "storm";
         a.timer = 0;
       }
     } else if (a.stage === "storm") {
       // Kurz warten, bis die Granaten einschlagen, dann losstürmen
-      if (a.timer === 6)
-        units.forEach((c, k) => b.orderStorm(c.id, a.lane + (k - (units.length - 1) / 2) * 120, enemyTrench));
-      if (a.timer > 120) {
+      if (a.timer === 6) {
+        const inf = units.filter((c) => c.type !== UNIT_TANK);
+        inf.forEach((c, k) => b.orderStorm(c.id, spread(k, inf.length, 130), b.terrain.frontY(enemySide, spread(k, inf.length, 130))));
+      }
+      if (a.timer > 130) {
         units.forEach((c) => {
           c.homeX = c.cx;
           c.homeY = c.cy;
@@ -215,7 +247,6 @@ export class BattleAI {
 
   private artillery(b: Battle, own: Company[], foe: Company[]) {
     if (this.artyWait > 0 || b.sides[this.side].artyCharges === 0) return;
-    const wireNear = WIRE_Y[this.side];
     let best: Company | null = null;
     let bestScore = 70;
     for (const c of foe) {
@@ -223,9 +254,11 @@ export class BattleAI {
       const inOpen = b.terrain.coverAt(c.cx, c.cy) < 0.5;
       let score = c.alive * (inOpen ? 1.6 : 0.4);
       if (c.type === UNIT_MG) score = 90;
+      if (c.type === UNIT_TANK) score = 60 * c.alive;
+      if (c.type === UNIT_GUN) score = 50 * c.alive; // Gegenbatterie
       // Näher an uns = gefährlicher
-      if ((c.cy - wireNear) * FORWARD[this.side] < 300) score *= 1.5;
-      if (own.some((o) => dist(o, { x: c.cx, y: c.cy }) < 110)) continue; // kein Eigenbeschuss
+      if ((c.cy - b.terrain.wireY(this.side, c.cx)) * FORWARD[this.side] < 300) score *= 1.5;
+      if (own.some((o) => o.type !== UNIT_MAGE && dist(o, { x: c.cx, y: c.cy }) < 110)) continue; // kein Eigenbeschuss
       if (b.barrages.some((br) => Math.hypot(br.x - c.cx, br.y - c.cy) < 80)) continue;
       if (score > bestScore) {
         bestScore = score;
@@ -257,7 +290,7 @@ export class BattleAI {
 
 function score(b: Battle, c: Company) {
   const open = b.terrain.coverAt(c.cx, c.cy) < 0.5;
-  return c.alive * (open ? 2 : 0.5) + (c.type === UNIT_MG ? 120 : 0);
+  return c.alive * (open ? 2 : 0.5) + (c.type === UNIT_MG ? 120 : 0) + (c.type === UNIT_TANK ? 200 : 0) + (c.type === UNIT_AT ? 60 : 0);
 }
 
 function dist(c: Company, p: { x: number; y: number }) {
@@ -268,8 +301,4 @@ function strengthNear(list: Company[], x: number, r: number, f: (c: Company) => 
   let s = 0;
   for (const c of list) if (f(c) && Math.abs(c.cx - x) < r) s += c.alive;
   return s;
-}
-
-function behindFront(c: Company, side: number) {
-  return (c.cy - TRENCH_Y[side]) * FORWARD[side] < 0;
 }

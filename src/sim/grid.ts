@@ -3,6 +3,10 @@ import { WORLD_H, WORLD_W } from "./config.ts";
 const CS = 32;
 const W = Math.ceil(WORLD_W / CS);
 const H = Math.ceil(WORLD_H / CS);
+// Grobes Raster (4×4 feine Zellen): schnelle Prüfung, ob überhaupt jemand in Reichweite ist
+const CC = CS * 4;
+const CW = Math.ceil(WORLD_W / CC);
+const CH = Math.ceil(WORLD_H / CC);
 
 /**
  * Räumliches Raster für eine Seite. Wird jeden Tick neu aufgebaut
@@ -12,6 +16,7 @@ export class SpatialGrid {
   private start = new Int32Array(W * H + 1);
   private items: Int32Array;
   private cellOf: Int32Array;
+  private coarse = new Int32Array(CW * CH);
   count = 0;
 
   constructor(capacity: number) {
@@ -22,11 +27,15 @@ export class SpatialGrid {
   rebuild(ids: ArrayLike<number>, n: number, xs: Float32Array, ys: Float32Array) {
     const start = this.start;
     start.fill(0);
+    this.coarse.fill(0);
     for (let i = 0; i < n; i++) {
       const id = ids[i];
       const c = cellIndex(xs[id], ys[id]);
       this.cellOf[i] = c;
       start[c + 1]++;
+      const cx = clamp(Math.floor(xs[id] / CC), 0, CW - 1);
+      const cy = clamp(Math.floor(ys[id] / CC), 0, CH - 1);
+      this.coarse[cy * CW + cx]++;
     }
     for (let c = 0; c < W * H; c++) start[c + 1] += start[c];
     const fill = start.slice(0, W * H);
@@ -49,7 +58,10 @@ export class SpatialGrid {
     ys: Float32Array,
     filter?: (id: number) => boolean,
   ): number {
-    if (this.count === 0) return -1;
+    if (this.count === 0 || !this.anyNear(x, y, maxDist)) {
+      this.lastDist = maxDist;
+      return -1;
+    }
     const gx = clamp(Math.floor(x / CS), 0, W - 1);
     const gy = clamp(Math.floor(y / CS), 0, H - 1);
     const maxR = Math.ceil(maxDist / CS);
@@ -84,6 +96,25 @@ export class SpatialGrid {
     }
     this.lastDist = Math.sqrt(bestD2);
     return best;
+  }
+
+  /** Gibt es im groben Raster überhaupt Einträge, die näher als maxDist sein könnten? */
+  anyNear(x: number, y: number, maxDist: number): boolean {
+    const x0 = clamp(Math.floor((x - maxDist) / CC), 0, CW - 1);
+    const x1 = clamp(Math.floor((x + maxDist) / CC), 0, CW - 1);
+    const y0 = clamp(Math.floor((y - maxDist) / CC), 0, CH - 1);
+    const y1 = clamp(Math.floor((y + maxDist) / CC), 0, CH - 1);
+    const r2 = maxDist * maxDist;
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        if (this.coarse[cy * CW + cx] === 0) continue;
+        // kürzester Abstand vom Punkt zur groben Zelle
+        const dx = Math.max(cx * CC - x, 0, x - (cx + 1) * CC);
+        const dy = Math.max(cy * CC - y, 0, y - (cy + 1) * CC);
+        if (dx * dx + dy * dy <= r2) return true;
+      }
+    }
+    return false;
   }
 
   /** Ruft fn für alle Einträge im Radius auf. */

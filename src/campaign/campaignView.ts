@@ -12,7 +12,8 @@ type Selection = { t: "none" } | { t: "prov"; id: number } | { t: "point"; id: n
 
 const STANCE_ORDER: Stance[] = ["hold", "defensive", "balanced", "aggressive"];
 const LANE_NAMES = ["Links", "Mitte", "Rechts"];
-const KIND_ICON: Record<UnitKind, string> = { infantry: "🪖", mg: "⚙", artillery: "💥", mage: "✦" };
+const KIND_ICON: Record<UnitKind, string> = { infantry: "🪖", mg: "⚙", artillery: "💥", mage: "✦", tank: "▰", at: "🎯", flame: "🔥" };
+const KIND_UNIT: Record<UnitKind, string> = { infantry: "Mann", mg: "MGs", artillery: "Geschütze", mage: "Magier", tank: "Panzer", at: "Tankgewehre", flame: "Flammenwerfer" };
 
 /** Die Kampagnenkarte: Länder, Fronten, eigene Truppen und alle Menüs. */
 export class CampaignView {
@@ -484,7 +485,7 @@ export class CampaignView {
       const c = u.cost;
       const ok = n.res.gold >= c.gold && n.res.material >= c.material && n.res.recruits >= c.recruits;
       html += `<div class="card2"><b>${KIND_ICON[kind]} ${u.name}</b>
-        <small>${kind === "infantry" ? `${u.size} Mann` : `${u.size} ${kind === "artillery" ? "Batterie" : kind === "mage" ? "Magier" : "MGs"}`} · Kampfkraft ${fmt(u.size * u.power)} · ${days(u.trainTime)}</small>
+        <small>${u.size} ${KIND_UNIT[kind]} · Kampfkraft ${fmt(u.size * u.power)} · ${days(u.trainTime)}</small>
         <small>💰${c.gold} ⚙${c.material} 👥${c.recruits}</small>
         <button ${ok ? "" : "disabled"} data-act="recruit" data-kind="${kind}">Ausbilden</button></div>`;
     }
