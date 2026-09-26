@@ -50,11 +50,15 @@ export class BattleAI {
   private attackStart = 0;
   /** Erfahrene Offiziere nutzen Drahtschneiden, Nebel und Stoßtrupps; unerfahrene stürmen einfach los */
   veteran: boolean;
+  /** Feindliche Stärke je Abschnitt in den letzten Minuten */
+  private history: { t: number; s: number[] }[] = [];
   /** Gehaltener Einbruch: dorthin geht Sperrfeuer gegen Gegenstöße */
   private held: { x: number; y: number; until: number } | null = null;
 
   constructor(side: number, stance: Stance = "balanced", veteran = true) {
     this.side = side;
+    // Beide Stäbe denken zeitversetzt: keine Seite entscheidet systematisch zuerst
+    this.thinkTimer = 2 + side * 1.5;
     this.veteran = veteran;
     this.stances = [stance, stance, stance];
     this.attackWait = 90;
@@ -74,6 +78,9 @@ export class BattleAI {
 
     const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual);
     const foe = b.companies.filter((c) => c.side !== this.side && c.alive > 0);
+    // Beobachtung: feindliche Stärke je Abschnitt, um frische Verluste zu erkennen
+    this.history.push({ t: b.time, s: LANES.map((x) => strengthNear(foe, x, 300, (c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN)) });
+    while (this.history.length > 0 && b.time - this.history[0].t > 150) this.history.shift();
 
     this.reserves(b);
     this.defend(b, own);
@@ -174,21 +181,29 @@ export class BattleAI {
       // Flanke mit dem besten Kräfteverhältnis (nur Flanken, die angreifen dürfen)
       let best = -1;
       let bestScore = 0;
+      const now = LANES.map((x) => strengthNear(foe, x, 300, (c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN));
+      const past = this.history.find((h) => b.time - h.t <= 150) ?? null;
       for (let l = 0; l < LANES.length; l++) {
         const a = AGGRESSION[this.stances[l]];
         if (a === 0) continue;
+        // Gelegenheit: wo der Gegner gerade viele Männer verloren hat (gescheiterter Angriff, Trommelfeuer)
+        const bled = past ? Math.max(0, past.s[l] - now[l]) : 0;
+        const chance = this.veteran ? 1 + Math.min(1, bled / 300) : 1;
         const mine =
           strengthNear(own, LANES[l], 300, (c) => (c.type === UNIT_RIFLE || c.type === UNIT_STORM) && c.morale > 60) +
           strengthNear(own, LANES[l], 600, (c) => c.type === UNIT_TANK) * 60;
         const theirs = strengthNear(foe, LANES[l], 300, (c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN) + 1;
-        const score = (mine / theirs) * a;
+        const score = (mine / theirs) * a * chance;
         if (score > bestScore) {
           bestScore = score;
           best = l;
         }
       }
-      // Erfahrene Offiziere greifen nur mit örtlicher Überlegenheit an
-      if (best < 0 || bestScore < (this.veteran ? 1.1 : 0.6)) {
+      // Erfahrene Offiziere greifen nur mit örtlicher Überlegenheit an – und wer insgesamt
+      // unterlegen ist, verteidigt lieber, außer der Gegner hat gerade schwer geblutet
+      const ratio = b.groundStrength(this.side) / Math.max(1, b.groundStrength(1 - this.side));
+      const need = this.veteran ? (ratio < 1 ? 1.3 / Math.max(0.5, ratio) ** 2 : 1.3) : 0.6;
+      if (best < 0 || bestScore < need) {
         this.attackWait = 30;
         return;
       }
