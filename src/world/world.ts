@@ -374,7 +374,7 @@ export class World {
     // KI entscheidet: nimmt an, wenn sie verliert oder der Krieg lange feststeckt
     const toIdx = w.a === to ? 0 : 1;
     const net = w.taken[toIdx] - w.taken[1 - toIdx];
-    const accept = days > 15 && (net <= -2 || (days > 60 && Math.abs(net) < 2) || this.nations[to].opinion[from] > 0);
+    const accept = days > 15 && (net <= -4 || (days > 365 && Math.abs(net) < 3) || this.nations[to].opinion[from] > 30);
     if (accept) this.makePeace(from, to);
     else if (from === this.player) this.log(`${this.nations[to].short} lehnt den Frieden ab.`, "bad", false);
     return accept;

@@ -116,7 +116,8 @@ export class WorldAI {
       const days = (w.time - war.since) / SECONDS_PER_DAY;
       const idx = war.a === n ? 0 : 1;
       const net = war.taken[idx] - war.taken[1 - idx];
-      if (days > 25 && (net <= -3 || (days > 90 && w.rng.next() < 0.2))) {
+      // Kriege sollen lange dauern: Frieden nur bei klarer Niederlage oder nach über einem Jahr
+      if ((days > 30 && net <= -5) || (days > 365 && w.rng.next() < 0.05)) {
         w.offerPeace(n, e);
         return;
       }
