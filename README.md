@@ -43,8 +43,14 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
   Gefallene, Explosionen mit Druckwelle und Trümmern, Rauch, Kamerawackeln, synthetischer Ton.
 - Drei Darstellungen zum Umschalten (Taste V): Klassisch, Deutlich (Farbmarker für kleine Bildschirme),
   Punkte (Übersicht).
+- **Du führst die Magier**, alles andere führen deine Offiziere. Du gibst ihnen Haltungen je
+  Flanke, befiehlst Angriffe oder den **Generalangriff** (G) und steuerst die Artillerie.
+- **Überlegenheit gewinnt**: Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer
+  unterlegen im Graben sitzt, bricht. Laufende Stürmer sind schwerer zu treffen. Im Test bricht
+  ein Generalangriff mit 1,5-facher Stärke den Gegner in wenigen Minuten. Bei Gleichstand ist er
+  ein Glücksspiel.
 - **Taktik lohnt sich** – alles wirkt nur über Beschuss, Treffer und Moral, es gibt keine Boni:
-  - **Angriff planen** (Taste G): Abschnitt antippen, und der Offizier führt den ganzen Angriff aus.
+  - **Angriff planen** (Taste P): Abschnitt antippen, und der Offizier führt den ganzen Angriff aus.
     Er zerschießt den Draht und vergast den feindlichen Unterstützungsgraben. Panzer rollen voraus,
     Nebel fällt auf den Graben, Stoßtrupps führen den Sturm. Die zweite Welle stürmt nach, sobald
     der Einbruch steht, und Begleit-MGs rücken nach. Nochmal drücken bricht den Angriff ab.
@@ -108,7 +114,7 @@ Dann auf dem Handy `http://<IP-deines-PCs>:8080` öffnen.
 | Pause / Tempo         | ⏸ 1× 2× 4× 8×               | Leertaste, 1–4       |
 | Frontpunkt öffnen     | Balken auf der Grenze       | Klick                |
 | Zurück zur Karte      | 🗺                          | Esc                  |
-| In der Schlacht       | Kompanie antippen, dann Ziel | H / S / R / O / A / N / K / G |
+| In der Schlacht       | Kompanie antippen, dann Ziel | G / P / A / N / K / H / R / O |
 
 ## Aufbau des Codes
 

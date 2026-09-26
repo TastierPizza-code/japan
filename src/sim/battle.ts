@@ -33,6 +33,8 @@ import {
   MINE_TANK_DAMAGE,
   MINE_TRIGGER,
   MORALE_PER_LOSS,
+  ODDS_RADIUS,
+  RUNNING_TARGET,
   MAGE_SPELL_KILL,
   ENFILADE_COVER,
   MORALE_RALLY,
@@ -91,6 +93,8 @@ export interface Company {
   morale: number;
   /** mittlere Deckung der Männer (0 = freies Feld, 1 = volle Deckung) */
   cover: number;
+  /** Kräfteverhältnis in der Umgebung: eigene / feindliche Soldaten (1 = gleich stark) */
+  odds: number;
   initial: number;
   alive: number;
   cx: number;
@@ -748,6 +752,8 @@ export class Battle {
         if (k !== K_TRENCH && k !== K_BUNKER) cover *= ENFILADE_COVER;
       }
       p *= 1 - cover;
+      // Wer im Laufschritt stürmt, ist schwer zu treffen
+      if (this.moving[t] && this.companies[this.comp[t]].order === "storm") p *= RUNNING_TARGET;
     }
     // Blind ins Nebelfeld geschossen hält kaum nieder
     this.pin(t, st.suppress * (0.3 + 0.7 * sight));
@@ -1086,7 +1092,7 @@ export class Battle {
     if (this.dmgSide === victim) this.friendly[victim]++;
     else this.kills[this.dmgSide < 0 ? 1 - victim : this.dmgSide][this.dmgCause]++;
     const type = this.type[id];
-    if (type === UNIT_RIFLE || type === UNIT_AT || type === UNIT_FLAME || type === UNIT_STORM) c.morale -= MORALE_PER_LOSS / c.initial;
+    if (type === UNIT_RIFLE || type === UNIT_AT || type === UNIT_FLAME || type === UNIT_STORM) c.morale -= (MORALE_PER_LOSS / c.initial) * oddsFear(c.odds);
     else if (type === UNIT_MG) c.morale -= 12;
     else if (type === UNIT_TANK) c.morale -= 25;
     const x = this.x[id];
@@ -1111,7 +1117,20 @@ export class Battle {
     }
   }
 
+  private oddsTimer = 0;
+
   private updateCompanies(dt: number) {
+    // Wer sieht, dass viele Kameraden um ihn sind und wenige Feinde, hält mehr aus – und umgekehrt
+    this.oddsTimer -= dt;
+    if (this.oddsTimer <= 0) {
+      this.oddsTimer = 1;
+      for (const c of this.companies) {
+        if (c.alive <= 0 || c.type === UNIT_MAGE || c.type === UNIT_GUN) continue;
+        const own = this.countNear(c.side, c.cx, c.cy, ODDS_RADIUS);
+        const foe = this.countNear(1 - c.side, c.cx, c.cy, ODDS_RADIUS);
+        c.odds = foe === 0 ? 4 : Math.max(0.25, Math.min(4, own / foe));
+      }
+    }
     for (const c of this.companies) {
       if (c.alive <= 0) continue;
       let sx = 0;
@@ -1151,7 +1170,7 @@ export class Battle {
       } else if (
         // Wer in guter Deckung liegt (Graben, Bunker), hält länger aus als im freien Feld
         c.morale <
-        (c.order === "storm" ? MORALE_ROUT_STORM : MORALE_ROUT) * (c.type === UNIT_STORM ? 0.6 : 1) * (1 - 0.5 * c.cover)
+        (c.order === "storm" ? MORALE_ROUT_STORM : MORALE_ROUT) * (c.type === UNIT_STORM ? 0.6 : 1) * (1 - 0.5 * c.cover) * oddsFear(c.odds)
       ) {
         this.setTarget(c, c.homeX, c.homeY, "rout");
       } else if (c.order === "storm" && arrived >= n * 0.8) {
@@ -1418,6 +1437,7 @@ export class Battle {
       homeY: y,
       morale: 100,
       cover: 0,
+      odds: 1,
       initial: size,
       alive: size,
       cx: x,
@@ -1562,4 +1582,9 @@ function wrapAngle(a: number) {
   while (a > Math.PI) a -= Math.PI * 2;
   while (a < -Math.PI) a += Math.PI * 2;
   return a;
+}
+
+/** Moralwirkung des Kräfteverhältnisses: überlegen bis 0,6-fach, gleich 1, stark unterlegen bis 1,7-fach */
+function oddsFear(odds: number) {
+  return Math.max(0.6, Math.min(1.7, 1 / Math.sqrt(odds)));
 }

@@ -201,7 +201,7 @@ export const ARTY_SHELL_INTERVAL = 1.6;
 export const ARTY_SPREAD = 55;
 export const ARTY_KILL_RADIUS = 16;
 export const ARTY_SUPPRESS_RADIUS = 45;
-export const ARTY_RELOAD = 45; // Batterie braucht so lange bis zum nächsten Feuerschlag
+export const ARTY_RELOAD = 75; // Batterie braucht so lange bis zum nächsten Feuerschlag
 export const SHELL_SPEED = 320; // Einheiten pro Sekunde (Flugzeit)
 
 // Panzer und Panzerabwehr
@@ -245,6 +245,10 @@ export const START_RESERVES = 2;
 export const MORALE_PER_LOSS = 130;
 export const MORALE_ROUT = 20;
 export const MORALE_ROUT_STORM = 12;
+/** Umkreis, in dem Soldaten das Kräfteverhältnis spüren */
+export const ODDS_RADIUS = 160;
+/** Trefferchance gegen Männer, die im Laufschritt stürmen */
+export const RUNNING_TARGET = 0.65;
 export const MORALE_RALLY = 50;
 
 export const OBJECTIVE_RADIUS = 70;

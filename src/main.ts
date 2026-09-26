@@ -330,11 +330,15 @@ class App {
     d.hidden = false;
     d.innerHTML = `<div class="card help">
       <h1>Taktik</h1>
-      <p>Deine <b>Offiziere</b> führen jede Flanke: <i>Halten · Defensiv · Ausgewogen · Aggressiv</i>.
-      Du gibst die großen Befehle. Einzelne Kompanien kannst du übernehmen und dem Offizier zurückgeben.</p>
+      <p>Du führst die <b>Magier</b> selbst: Magier antippen, dann das Ziel. Nach getaner Arbeit schickst du sie zum Aufladen <i>zurück</i>.
+      Alle anderen Kompanien führen deine <b>Offiziere</b>, je Flanke mit einer Haltung:
+      <i>Halten · Defensiv · Ausgewogen · Aggressiv</i>. Du gibst die großen Befehle.</p>
       <h3>Angreifen</h3>
       <ul>
-        <li><b>Angriff planen</b> (G): Abschnitt antippen. Der Offizier zerschießt den Draht und vergast die Reserven.
+        <li><b>Überlegenheit gewinnt.</b> Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer unterlegen im Graben sitzt, bricht.</li>
+        <li><b>Generalangriff</b> (G): alle Flanken stürmen gleichzeitig. Das ist der Todesstoß, wenn du klar überlegen bist.
+        Bei Gleichstand ist er ein Glücksspiel.</li>
+        <li><b>Angriff planen</b> (P): Abschnitt antippen. Der Offizier zerschießt den Draht und vergast die Reserven.
         Panzer rollen voraus, Nebel fällt, Stoßtrupps stürmen, die zweite Welle folgt.</li>
         <li>Am besten <b>kontern</b>: dort angreifen, wo der Feind gerade bei einem Sturm geblutet hat.</li>
         <li>Gegen einen voll besetzten Graben scheitert fast jeder Angriff. Schwäche ihn vorher mit Artillerie und Magiern.</li>

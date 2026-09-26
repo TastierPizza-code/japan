@@ -221,9 +221,12 @@ export class BattleAI {
   private offense(b: Battle, own: Company[], foe: Company[]) {
     const fwd = FORWARD[this.side];
     const enemySide = 1 - this.side;
+    if (this.generalUntil > b.time) return;
     if (!this.attack) {
       const aggr = this.maxAggression();
       if (this.attackWait > 0 || aggr === 0) return;
+      // Klar überlegen: kein Stückwerk mehr, alles auf einmal
+      if (this.veteran && b.groundStrength(this.side) > b.groundStrength(1 - this.side) * 1.6 && b.time > 300 && this.generalAttack(b)) return;
       // Flanke mit dem besten Kräfteverhältnis (nur Flanken, die angreifen dürfen)
       let best = -1;
       let bestScore = 0;
@@ -550,6 +553,39 @@ export class BattleAI {
     return this.startAttack(b, own, lane, true);
   }
 
+  /** Generalangriff läuft bis zu diesem Zeitpunkt */
+  generalUntil = -1;
+
+  /**
+   * Generalangriff: alle Kompanien stürmen gleichzeitig geradeaus auf den feindlichen Graben,
+   * die Artillerie legt Sprengfeuer auf den Graben, Panzer rollen voraus. MGs geben aus der
+   * Stellung Feuerschutz.
+   */
+  generalAttack(b: Battle): boolean {
+    if (b.result || this.generalUntil > b.time) return false;
+    const enemy = 1 - this.side;
+    const fwd = FORWARD[this.side];
+    if (this.attack) this.endAttack(b);
+    let n = 0;
+    for (const c of b.companies) {
+      if (c.side !== this.side || c.alive <= 0 || c.manual || c.order === "rout") continue;
+      if (c.type !== UNIT_RIFLE && c.type !== UNIT_STORM && c.type !== UNIT_FLAME && c.type !== UNIT_TANK) continue;
+      const x = Math.max(60, Math.min(WORLD_W - 60, c.cx));
+      if (c.type === UNIT_TANK) b.orderMove(c.id, x, b.terrain.frontY(enemy, x) + fwd * 40);
+      else b.orderStorm(c.id, x, b.terrain.frontY(enemy, x));
+      n += c.alive;
+    }
+    if (n === 0) return false;
+    for (const x of LANES) {
+      b.callArtillery(this.side, x, b.terrain.frontY(enemy, x), "he");
+      for (const dx of [-80, 80]) b.signal(x + dx, this.front(b, x + dx), 0);
+    }
+    this.generalUntil = b.time + 240;
+    this.report(`Generalangriff! ${n} Mann stürmen auf allen Flanken`, "info", WORLD_W / 2, this.front(b, WORLD_W / 2));
+    this.onLog?.(`Generalangriff mit ${n} Mann`);
+    return true;
+  }
+
   /** Laufender Angriff für die Karte: Abschnitt, Einbruchstelle, Phase */
   attackPlan(): { lane: number; breach: number; stage: string } | null {
     const a = this.attack;
@@ -620,8 +656,9 @@ export class BattleAI {
       if (c.type === UNIT_TANK) score = 60 * c.alive;
       if (c.type === UNIT_GUN) {
         // Gegenbatterie: wer gerade gefeuert hat, ist per Schallmessung geortet
+        // Gegenbatterie nur nebenbei: Truppen, die gerade angreifen oder im Freien stehen, gehen vor
         const heard = b.time - b.lastGunfire[c.side] < 40;
-        score = (heard ? 140 : 60) * c.alive;
+        score = (heard ? 40 : 15) * c.alive;
       }
       // Näher an uns = gefährlicher
       if ((c.cy - b.terrain.wireY(this.side, c.cx)) * FORWARD[this.side] < 300) score *= 1.5;

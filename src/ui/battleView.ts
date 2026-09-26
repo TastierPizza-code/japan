@@ -64,6 +64,7 @@ export class BattleView {
     $("#arty").addEventListener("click", () => this.setMode(this.mode === "arty" ? "none" : "arty"));
     $("#smokeBtn").addEventListener("click", () => this.setMode(this.mode === "smoke" ? "none" : "smoke"));
     $("#planBtn").addEventListener("click", () => this.planButton());
+    $("#generalBtn").addEventListener("click", () => this.generalButton());
     $("#gasBtn").addEventListener("click", () => this.setMode(this.mode === "gas" ? "none" : "gas"));
     $("#modecancel").addEventListener("click", () => this.setMode("none"));
     $("#reserve").addEventListener("click", () => {
@@ -107,6 +108,9 @@ export class BattleView {
     const campaign = !!ctx.world;
     $("#reserve").hidden = campaign;
     $("#officerBtn").hidden = !ctx.officer;
+    // Du führst die Magier, alles andere führen die Offiziere
+    $('[data-order="storm"]').hidden = true;
+    for (const c of ctx.battle.companies) if (c.side === PLAYER && !commandable(c)) c.manual = false;
     $("#orders").hidden = ctx.spectator;
     $("#support").hidden = ctx.spectator;
     this.hud();
@@ -224,6 +228,14 @@ export class BattleView {
 
   // ---------------------------------------------------------------- Befehle
 
+  /** Generalangriff: alle Flanken stürmen gleichzeitig */
+  private generalButton() {
+    const off = this.ctx?.officer;
+    if (!off || this.ctx?.spectator) return;
+    off.generalAttack(this.battle);
+    this.hud();
+  }
+
   select(id: number) {
     const c = this.battle.companies[id];
     if (!c || c.side !== PLAYER || c.alive <= 0 || this.ctx?.spectator) id = -1;
@@ -248,7 +260,7 @@ export class BattleView {
       return;
     }
     const sel = b.companies[this.selected];
-    if (sel && sel.alive > 0) {
+    if (sel && sel.alive > 0 && commandable(sel)) {
       sel.manual = true;
       if (this.mode === "storm") {
         b.orderStorm(sel.id, w.x, w.y);
@@ -260,11 +272,12 @@ export class BattleView {
       this.hud();
       return;
     }
-    // Nichts ausgewählt: nächste eigene Kompanie in der Nähe auswählen
+    // Nichts (Führbares) ausgewählt: nächste eigene Kompanie in der Nähe auswählen, Magier bevorzugt
     let best: Company | null = null;
     let bd = 50 / this.cam.zoom;
     for (const c of b.companies) {
       if (c.side !== PLAYER || c.alive <= 0) continue;
+      if (!commandable(c) && best && commandable(best)) continue;
       const d = Math.hypot(c.cx - w.x, c.cy - w.y);
       if (d < bd) {
         bd = d;
@@ -278,6 +291,7 @@ export class BattleView {
     if (!this.ctx || this.selected < 0) return;
     const b = this.battle;
     const c = b.companies[this.selected];
+    if (!commandable(c)) return;
     if (kind === "officer") {
       c.manual = false;
     } else if (kind === "storm") {
@@ -321,7 +335,8 @@ export class BattleView {
     else if (k === "o") this.order("officer");
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
     else if (k === "n") this.setMode(this.mode === "smoke" ? "none" : "smoke");
-    else if (k === "g") this.planButton();
+    else if (k === "g") this.generalButton();
+    else if (k === "p") this.planButton();
     else if (k === "k") this.setMode(this.mode === "gas" ? "none" : "gas");
     else if (k === "v") this.cycleStyle();
     else if (k === "escape" && (this.mode !== "none" || this.selected >= 0)) {
@@ -422,11 +437,16 @@ export class BattleView {
     }
 
     const side = b.sides[PLAYER];
+    const gen = $<HTMLButtonElement>("#generalBtn");
+    const genLeft = this.ctx.officer ? this.ctx.officer.generalUntil - b.time : 0;
+    gen.hidden = !this.ctx.officer;
+    gen.disabled = genLeft > 0;
+    gen.textContent = genLeft > 0 ? `Generalangriff · ${Math.ceil(genLeft)}s` : "Generalangriff";
     const plan = $<HTMLButtonElement>("#planBtn");
     const status = this.ctx.officer?.attackStatus();
     plan.hidden = !this.ctx.officer;
     plan.textContent = status ? `${status} ✕` : "Angriff planen";
-    plan.title = status ? "Angriff abbrechen (G): alle zurück in die Ausgangsstellung" : "Angriff planen (G)";
+    plan.title = status ? "Angriff abbrechen (P): alle zurück in die Ausgangsstellung" : "Angriff planen (P)";
     const arty = $<HTMLButtonElement>("#arty");
     arty.textContent =
       side.artyMax === 0
@@ -444,15 +464,13 @@ export class BattleView {
     if (sel && sel.alive <= 0) this.selected = -1;
     const hasSel = this.selected >= 0;
     document.querySelectorAll<HTMLButtonElement>("#orders button").forEach((btn) => {
-      btn.disabled = !hasSel || sel.order === "rout" || (btn.dataset.order === "officer" && !sel.manual);
+      btn.disabled = !hasSel || !commandable(sel) || sel.order === "rout" || (btn.dataset.order === "officer" && !sel.manual);
     });
     $("#selinfo").innerHTML = this.ctx.spectator
       ? "Fremde Schlacht – du schaust nur zu."
       : hasSel
         ? this.describe(sel)
-        : world
-          ? "Die KI-Offiziere führen die Flanken. Tippe eine Kompanie an, um selbst zu befehlen."
-          : "Tippe auf eine eigene Kompanie (blaue Fahne), um sie zu befehligen.";
+        : "Du führst die Magier ✦: antippen, dann Ziel antippen. Die Kompanien führen deine Offiziere – gib ihnen Haltungen und Befehle.";
 
     for (const c of b.companies) {
       if (c.side !== PLAYER) continue;
@@ -466,7 +484,8 @@ export class BattleView {
         $("#chips").appendChild(chip);
         this.chipEls.set(c.id, chip);
       }
-      chip.hidden = c.alive <= 0;
+      // Unten nur die Magier: die führst du selbst
+      chip.hidden = c.alive <= 0 || !commandable(c);
       chip.classList.toggle("sel", c.id === this.selected);
       const color = moraleColor(c);
       const who = world ? (c.manual ? " ✋" : "") : "";
@@ -528,4 +547,9 @@ function orderText(c: Company, b: Battle) {
 
 export function fmt(n: number) {
   return n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`;
+}
+
+/** Was der Spieler selbst führt: die Magier. Alles andere führen die Offiziere. */
+function commandable(c: Company) {
+  return c.type === UNIT_MAGE;
 }
