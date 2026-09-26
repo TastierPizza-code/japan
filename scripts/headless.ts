@@ -9,8 +9,9 @@ const seed = Number(process.argv[2] ?? 1);
 const maxMinutes = Number(process.argv[3] ?? 40);
 const big = process.argv.includes("--gross");
 
+const naive = process.argv.includes("--naiv"); // Gegner (oben) mit unerfahrenen Offizieren
 const b = new Battle(seed, { big });
-const ais = [new BattleAI(0), new BattleAI(1)];
+const ais = [new BattleAI(0), new BattleAI(1, "balanced", !naive)];
 const t0 = performance.now();
 let ticks = 0;
 let lastReport = 0;

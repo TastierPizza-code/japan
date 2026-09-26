@@ -12,6 +12,9 @@ import {
   FLAME_CONE,
   FLAME_PER_SQUAD,
   FORWARD,
+  GRENADE_RADIUS,
+  GRENADE_RANGE,
+  GRENADE_RELOAD,
   GUN_DIRECT_DAMAGE,
   GUN_Y,
   GUNS_PER_BATTERY,
@@ -29,6 +32,9 @@ import {
   MINE_RADIUS,
   MINE_TANK_DAMAGE,
   MINE_TRIGGER,
+  MORALE_PER_LOSS,
+  MAGE_SPELL_KILL,
+  ENFILADE_COVER,
   MORALE_RALLY,
   MORALE_ROUT,
   MORALE_ROUT_STORM,
@@ -37,6 +43,10 @@ import {
   REAR_Y,
   RESERVE_COOLDOWN,
   SHELL_SPEED,
+  SMOKE_BLOCK,
+  SMOKE_DURATION,
+  SMOKE_RADIUS,
+  STORM_PER_SQUAD,
   START_RESERVES,
   STATS,
   STORM_ENGAGE_RANGE,
@@ -51,7 +61,9 @@ import {
   UNIT_MAGE,
   UNIT_MG,
   UNIT_RIFLE,
+  UNIT_STORM,
   UNIT_TANK,
+  WIND,
   WORLD_H,
   WORLD_W,
 } from "./config.ts";
@@ -111,7 +123,18 @@ export interface Shell {
   direct: boolean;
   /** Ziel bei Direktschuss (Panzer), sonst -1 */
   target: number;
-  kind: "he" | "cannon" | "at";
+  kind: "he" | "smoke" | "cannon" | "at" | "grenade";
+  /** Trefferfaktor bei Direktschuss (Nebel zwischen Schütze und Ziel) */
+  acc?: number;
+}
+
+/** Nebelwand: behindert die Sicht und damit das Zielen */
+export interface Smoke {
+  x: number;
+  y: number;
+  r: number;
+  t0: number;
+  until: number;
 }
 
 interface PendingShot {
@@ -119,6 +142,7 @@ interface PendingShot {
   at: number;
   x: number;
   y: number;
+  kind: "he" | "smoke";
 }
 
 export interface Fire {
@@ -158,7 +182,7 @@ export interface BattleEvents {
   hits: number[];
   /** x,y,side,type,angle */
   deaths: number[];
-  /** x,y,r,kind (0 Granate, 1 Magie, 2 Mine, 3 Kanone, 4 Panzer explodiert, 5 Flammentank) */
+  /** x,y,r,kind (0 Granate, 1 Magie, 2 Mine, 3 Kanone, 4 Panzer explodiert, 5 Flammentank, 6 Handgranate, 7 Nebelgranate) */
   blasts: number[];
   /** x,y,r */
   craters: number[];
@@ -213,7 +237,10 @@ export class Battle {
   companies: Company[] = [];
   barrages: Barrage[] = [];
   shells: Shell[] = [];
+  smokes: Smoke[] = [];
   fires: Fire[] = [];
+  /** Wann hat die Artillerie einer Seite zuletzt gefeuert (verrät ihre Stellung) */
+  lastGunfire = [-100, -100];
   objectives: Objective[] = [];
   sides: SideState[] = [];
   result: BattleResult | null = null;
@@ -268,11 +295,12 @@ export class Battle {
     for (let s = 0; s < 2; s++) {
       const n = (i: number) => (s === 0 ? `${i}. Kompanie` : `${i}e Cie`);
       let k = 1;
-      for (const x of xs) this.createCompany(s, UNIT_RIFLE, n(k++), x, t.frontY(s, x), 280);
+      // Tiefe Verteidigung: vorn dünner besetzt, dahinter die Masse
+      for (const x of xs) this.createCompany(s, UNIT_RIFLE, n(k++), x, t.frontY(s, x), 180);
       for (const x of xs) this.createCompany(s, UNIT_RIFLE, n(k++), x, t.supportY(s, x), 280);
       for (const x of [300, 650, 950, 1300]) {
         const y = (t.supportY(s, x) + GUN_Y[s]) / 2 - FORWARD[s] * 20;
-        this.createCompany(s, UNIT_RIFLE, n(k++), x, y, 280);
+        this.createCompany(s, UNIT_RIFLE, n(k++), x, y, 300);
       }
       const spots = this.mgSpots(s);
       for (let i = 0; i < 4; i++) {
@@ -280,6 +308,7 @@ export class Battle {
         this.createCompany(s, UNIT_MG, s === 0 ? `MG-Zug ${"ABCD"[i]}` : `Mitrailleuses ${"ABCD"[i]}`, sp.x + Math.floor(i / spots.length) * 60, sp.y, MG_PER_SECTION);
       }
       for (const x of [560, 1040]) this.createCompany(s, UNIT_AT, s === 0 ? "Tankgewehr-Trupp" : "Fusils antichar", x, t.frontY(s, x), AT_PER_SQUAD);
+      for (const x of [240, 800, 1360]) this.createCompany(s, UNIT_STORM, s === 0 ? "Stoßtrupp" : "Corps franc", x, t.supportY(s, x), STORM_PER_SQUAD);
       for (const x of [400, 1200]) this.createCompany(s, UNIT_FLAME, s === 0 ? "Flammenwerfer" : "Lance-flammes", x, t.supportY(s, x), FLAME_PER_SQUAD);
       for (const x of [500, 1100]) {
         const y = (t.supportY(s, x) + GUN_Y[s]) / 2 + FORWARD[s] * 10;
@@ -306,6 +335,7 @@ export class Battle {
       this.createCompany(s, UNIT_MG, s === 0 ? "MG-Zug B" : "Mitrailleuses B", mgSpots[1].x, mgSpots[1].y, MG_PER_SECTION);
       this.createCompany(s, UNIT_AT, s === 0 ? "Tankgewehr-Trupp" : "Fusils antichar", WORLD_W / 2 + 120, t.frontY(s, WORLD_W / 2 + 120), AT_PER_SQUAD);
       this.createCompany(s, UNIT_FLAME, s === 0 ? "Flammenwerfer" : "Lance-flammes", WORLD_W / 2 - 150, t.supportY(s, WORLD_W / 2 - 150), FLAME_PER_SQUAD);
+      this.createCompany(s, UNIT_STORM, s === 0 ? "Stoßtrupp" : "Corps franc", WORLD_W / 2 + 150, t.supportY(s, WORLD_W / 2 + 150), STORM_PER_SQUAD);
       const tankY = (t.supportY(s, WORLD_W / 2) + GUN_Y[s]) / 2;
       this.createCompany(s, UNIT_TANK, s === 0 ? "Panzerzug" : "Chars d'assaut", WORLD_W / 2, tankY, TANKS_PER_PLATOON);
       this.createCompany(s, UNIT_GUN, s === 0 ? "1. Batterie" : "1re Batterie", WORLD_W / 2, GUN_Y[s], GUNS_PER_BATTERY);
@@ -359,7 +389,7 @@ export class Battle {
   }
 
   /** Feuerschlag: eine bereite Batterie beschießt das Zielgebiet. */
-  callArtillery(side: number, x: number, y: number): boolean {
+  callArtillery(side: number, x: number, y: number, kind: "he" | "smoke" = "he"): boolean {
     if (this.result) return false;
     x = clamp(x, 0, WORLD_W);
     y = clamp(y, 0, WORLD_H);
@@ -369,15 +399,16 @@ export class Battle {
     let last = 0;
     const guns = battery.members.filter((g) => this.alive[g]);
     guns.forEach((g, gi) => {
-      for (let k = 0; k < ARTY_SHELLS_PER_GUN; k++) {
+      const shots = kind === "smoke" ? 2 : ARTY_SHELLS_PER_GUN;
+      for (let k = 0; k < shots; k++) {
         const at = this.time + 0.5 + gi * 0.35 + k * ARTY_SHELL_INTERVAL + this.rng.next() * 0.4;
-        this.pending.push({ gun: g, at, x, y });
+        this.pending.push({ gun: g, at, x, y, kind });
         const flight = Math.hypot(x - this.x[g], y - this.y[g]) / SHELL_SPEED + 1;
         first = Math.min(first, at + flight);
         last = Math.max(last, at + flight);
       }
     });
-    battery.readyAt = this.time + ARTY_RELOAD + ARTY_SHELLS_PER_GUN * ARTY_SHELL_INTERVAL;
+    battery.readyAt = this.time + (kind === "smoke" ? ARTY_RELOAD * 0.7 : ARTY_RELOAD) + ARTY_SHELLS_PER_GUN * ARTY_SHELL_INTERVAL;
     this.barrages.push({ side, x, y, fireAt: first, until: last });
     return true;
   }
@@ -409,6 +440,7 @@ export class Battle {
     this.updateArtillery();
     this.updateMines(dt);
     this.updateFires(dt);
+    this.updateSmoke(dt);
     this.updateSides(dt);
     this.updateObjectives(dt);
     if (!this.campaign && Math.floor(this.time) !== Math.floor(this.time - dt)) this.checkVictory();
@@ -481,7 +513,7 @@ export class Battle {
     this.idCount[0] = 0;
     this.idCount[1] = 0;
     this.special = [[], []];
-    for (let s = 0; s < 2; s++) for (let t = 0; t <= UNIT_GUN; t++) this.special[s][t] = [];
+    for (let s = 0; s < 2; s++) for (let t = 0; t <= UNIT_STORM; t++) this.special[s][t] = [];
     for (let i = 0; i < this.n; i++) {
       if (!this.alive[i]) continue;
       const s = this.side[i];
@@ -505,7 +537,8 @@ export class Battle {
       const isTank = type === UNIT_TANK;
       const enemy = 1 - this.side[i];
 
-      this.suppress[i] = Math.max(0, this.suppress[i] - 0.15 * dt);
+      this.suppress[i] = Math.max(0, this.suppress[i] - 0.1 * dt);
+      this.reload2[i] -= dt;
       if (isMage) this.hp[i] = Math.min(st.hp, this.hp[i] + MAGE_SHIELD_REGEN * dt);
 
       // --- Zielauswahl (nicht jeden Tick, das spart viel Rechenzeit)
@@ -590,7 +623,7 @@ export class Battle {
       }
 
       // --- Feuern / Nahkampf
-      if (isTank) this.tankCannon(i, dt);
+      if (isTank) this.tankCannon(i);
       this.reload[i] -= dt;
       if (this.reload[i] > 0 || c.order === "rout") continue;
       if (type === UNIT_GUN) {
@@ -600,6 +633,14 @@ export class Battle {
       if (t < 0) continue;
       tDist = Math.hypot(this.x[t] - this.x[i], this.y[t] - this.y[i]);
       const tType = this.type[t];
+      // Handgranate auf Gegner in Deckung (Grabenkampf)
+      if (st.grenades && this.reload2[i] <= 0 && tDist < GRENADE_RANGE && tDist > 5 && c.order !== "retreat" && !STATS[tType].armored && tType !== UNIT_MAGE) {
+        if (c.order === "storm" || terrain.coverAt(this.x[t], this.y[t]) >= 0.4) {
+          this.throwGrenade(i, t);
+          this.reload[i] = 1.2;
+          continue;
+        }
+      }
       const targetIsMage = tType === UNIT_MAGE;
       const targetArmored = STATS[tType].armored === true;
 
@@ -620,6 +661,11 @@ export class Battle {
         this.reload[i] = 0.3;
         continue;
       }
+      // Unter schwerem Feuer: Kopf runter, nicht mehr schießen (Trommelfeuer wirkt)
+      if (this.suppress[i] > 0.75 && !isMage && !isTank && type !== UNIT_GUN) {
+        this.reload[i] = 0.5 + rng.next();
+        continue;
+      }
       if (!isTank) this.ang[i] = Math.atan2(this.y[t] - this.y[i], this.x[t] - this.x[i]);
 
       if (isMage) {
@@ -632,7 +678,7 @@ export class Battle {
       } else if (type === UNIT_FLAME) {
         this.flame(i);
       } else if (type === UNIT_AT && targetArmored) {
-        const p = 0.4 * (1 - 0.5 * (tDist / st.range)) * (1 - 0.5 * this.suppress[i]);
+        const p = 0.4 * (1 - 0.5 * (tDist / st.range)) * (1 - 0.5 * this.suppress[i]) * this.sight(i, t);
         const hit = rng.next() < p;
         this.events.shots.push(this.x[i], this.y[i], this.x[t], this.y[t], UNIT_AT, this.side[i]);
         if (hit) {
@@ -651,10 +697,17 @@ export class Battle {
     const rng = this.rng;
     const st = STATS[this.type[i]];
     const tType = this.type[t];
-    let p = baseHit * (1 - 0.75 * (dist / st.range)) * (1 - 0.6 * this.suppress[i]);
+    const sight = this.sight(i, t);
+    let p = baseHit * (1 - 0.75 * (dist / st.range)) * (1 - 0.6 * this.suppress[i]) * sight;
     if (tType === UNIT_MAGE) p *= MAGE_EVASION * (this.type[i] === UNIT_MG ? 1.6 : 1);
-    else p *= 1 - this.terrain.coverAt(this.x[t], this.y[t]);
-    this.suppress[t] = Math.min(1, this.suppress[t] + st.suppress);
+    else {
+      let cover = this.terrain.coverAt(this.x[t], this.y[t]);
+      // Längs des Grabens geschossen: Brustwehr und Trichterrand schützen nur nach vorn
+      if (cover > 0 && Math.abs(this.x[t] - this.x[i]) > 2 * Math.abs(this.y[t] - this.y[i])) cover *= ENFILADE_COVER;
+      p *= 1 - cover;
+    }
+    // Blind ins Nebelfeld geschossen hält kaum nieder
+    this.pin(t, st.suppress * (0.3 + 0.7 * sight));
     let ex = this.x[t];
     let ey = this.y[t];
     if (rng.next() < p) {
@@ -744,14 +797,14 @@ export class Battle {
     const enemy = 1 - this.side[i];
     this.grids[enemy].forEachInRadius(ex, ey, MAGE_SPELL_RADIUS * 2, this.x, this.y, (id, d) => {
       if (!this.alive[id]) return;
-      this.suppress[id] = Math.min(1, this.suppress[id] + st.suppress * (1 - d / (MAGE_SPELL_RADIUS * 2)));
+      this.pin(id, st.suppress * (1 - d / (MAGE_SPELL_RADIUS * 2)));
       if (d > MAGE_SPELL_RADIUS) return;
       if (STATS[this.type[id]].armored) {
         this.damage(id, 3, 0);
         return;
       }
       const cover = this.terrain.coverAt(this.x[id], this.y[id]);
-      const p = 0.7 * (1 - cover * 0.6) * (1 - (d / MAGE_SPELL_RADIUS) * 0.5);
+      const p = MAGE_SPELL_KILL * (1 - cover * 0.6) * (1 - (d / MAGE_SPELL_RADIUS) * 0.5);
       if (this.rng.next() < p) this.damage(id, 1, Math.atan2(this.y[id] - ey, this.x[id] - ex));
     });
   }
@@ -766,7 +819,7 @@ export class Battle {
       if (!this.alive[id]) return;
       const da = Math.abs(wrapAngle(Math.atan2(this.y[id] - this.y[i], this.x[id] - this.x[i]) - a));
       if (da > FLAME_CONE) return;
-      this.suppress[id] = 1;
+      this.pin(id, 1);
       const c = this.companies[this.comp[id]];
       c.morale -= 0.4;
       if (STATS[this.type[id]].armored) return;
@@ -780,8 +833,7 @@ export class Battle {
   }
 
   /** Panzerkanone: kleine Sprenggranate auf MGs, Geschütze oder Menschenansammlungen */
-  private tankCannon(i: number, dt: number) {
-    this.reload2[i] -= dt;
+  private tankCannon(i: number) {
     if (this.reload2[i] > 0) return;
     const enemy = 1 - this.side[i];
     let target = -1;
@@ -802,7 +854,7 @@ export class Battle {
     }
     const a = Math.atan2(this.y[target] - this.y[i], this.x[target] - this.x[i]);
     const d = Math.hypot(this.x[target] - this.x[i], this.y[target] - this.y[i]);
-    const spread = d * 0.05;
+    const spread = d * 0.05 + (1 - this.sight(i, target)) * 30;
     this.shells.push({
       side: this.side[i],
       sx: this.x[i] + Math.cos(a) * 10,
@@ -849,9 +901,74 @@ export class Battle {
       direct: true,
       target,
       kind: "at",
+      acc: this.sight(i, target),
     });
     this.events.gunfire.push(this.x[i], this.y[i], a, 0);
     this.reload[i] = STATS[UNIT_GUN].reload + this.rng.next();
+  }
+
+  /** Niederhalten – abgeschwächt bei Einheiten mit starken Nerven (Stoßtrupps) */
+  private pin(id: number, amount: number) {
+    const nerve = STATS[this.type[id]].nerve ?? 1;
+    this.suppress[id] = Math.min(1, this.suppress[id] + amount * nerve);
+  }
+
+  /** Sicht zwischen zwei Einheiten: 1 = frei, bis 1 - SMOKE_BLOCK mitten durch dichten Nebel */
+  sight(i: number, t: number): number {
+    if (this.smokes.length === 0) return 1;
+    return 1 - SMOKE_BLOCK * this.smokeBetween(this.x[i], this.y[i], this.x[t], this.y[t]);
+  }
+
+  /** Nebeldichte entlang einer Sichtlinie (0..1) */
+  smokeBetween(x1: number, y1: number, x2: number, y2: number): number {
+    // Mehrere Schwaden hintereinander verdichten sich
+    let clear = 1;
+    for (const sm of this.smokes) {
+      const d = distToSegment(sm.x, sm.y, x1, y1, x2, y2);
+      if (d >= sm.r) continue;
+      const age = this.time - sm.t0;
+      const fade = Math.min(1, age / 3) * Math.min(1, (sm.until - this.time) / 10);
+      clear *= 1 - Math.min(1, 1.3 * (1 - (d / sm.r) ** 2)) * fade;
+    }
+    return 1 - clear;
+  }
+
+  private updateSmoke(dt: number) {
+    if (this.smokes.length === 0) return;
+    for (const sm of this.smokes) sm.x += WIND * dt;
+    this.smokes = this.smokes.filter((sm) => sm.until > this.time);
+  }
+
+  private throwGrenade(i: number, t: number) {
+    const d = Math.hypot(this.x[t] - this.x[i], this.y[t] - this.y[i]);
+    this.ang[i] = Math.atan2(this.y[t] - this.y[i], this.x[t] - this.x[i]);
+    this.shells.push({
+      side: this.side[i],
+      sx: this.x[i],
+      sy: this.y[i],
+      tx: this.x[t] + this.rng.gauss() * 2.5,
+      ty: this.y[t] + this.rng.gauss() * 2.5,
+      t0: this.time,
+      dur: 0.5 + d / 40,
+      direct: false,
+      target: -1,
+      kind: "grenade",
+    });
+    this.reload2[i] = GRENADE_RELOAD * (this.type[i] === UNIT_STORM ? 0.55 : 1) + this.rng.next() * 3;
+  }
+
+  private grenadeImpact(s: Shell) {
+    const enemy = 1 - s.side;
+    this.grids[enemy].forEachInRadius(s.tx, s.ty, GRENADE_RADIUS * 2, this.x, this.y, (id, d) => {
+      if (!this.alive[id] || STATS[this.type[id]].armored) return;
+      this.pin(id, 0.5);
+      if (d > GRENADE_RADIUS) return;
+      // Im Graben hilft Deckung gegen Handgranaten nur wenig
+      const cover = this.terrain.coverAt(this.x[id], this.y[id]);
+      const p = 0.6 * (1 - cover * 0.35) * (1 - (d / GRENADE_RADIUS) * 0.5);
+      if (this.rng.next() < p) this.damage(id, 1, Math.atan2(this.y[id] - s.ty, this.x[id] - s.tx));
+    });
+    this.events.blasts.push(s.tx, s.ty, GRENADE_RADIUS, 6);
   }
 
   private damage(id: number, amount: number, angle: number) {
@@ -864,7 +981,7 @@ export class Battle {
     c.alive--;
     c.lastLoss = this.time;
     const type = this.type[id];
-    if (type === UNIT_RIFLE || type === UNIT_AT || type === UNIT_FLAME) c.morale -= 60 / c.initial;
+    if (type === UNIT_RIFLE || type === UNIT_AT || type === UNIT_FLAME || type === UNIT_STORM) c.morale -= MORALE_PER_LOSS / c.initial;
     else if (type === UNIT_MG) c.morale -= 12;
     else if (type === UNIT_TANK) c.morale -= 25;
     const x = this.x[id];
@@ -923,7 +1040,7 @@ export class Battle {
         c.morale = Math.min(100, c.morale + 2 * dt);
         const home = Math.hypot(c.cx - c.homeX, c.cy - c.homeY) < 60;
         if (home && c.morale >= MORALE_RALLY) this.setTarget(c, c.homeX, c.homeY, "advance");
-      } else if (c.morale < (c.order === "storm" ? MORALE_ROUT_STORM : MORALE_ROUT)) {
+      } else if (c.morale < (c.order === "storm" ? MORALE_ROUT_STORM : MORALE_ROUT) * (c.type === UNIT_STORM ? 0.6 : 1)) {
         this.setTarget(c, c.homeX, c.homeY, "rout");
       } else if (c.order === "storm" && arrived >= n * 0.8) {
         // Angekommen: im eroberten Abschnitt Stellung beziehen
@@ -945,15 +1062,16 @@ export class Battle {
       }
       if (p.gun < 0 || !this.alive[p.gun]) continue;
       const g = p.gun;
-      const r = Math.sqrt(this.rng.next()) * ARTY_SPREAD;
+      const r = Math.sqrt(this.rng.next()) * ARTY_SPREAD * (p.kind === "smoke" ? 1.3 : 1);
       const a = this.rng.next() * Math.PI * 2;
       const tx = p.x + Math.cos(a) * r;
       const ty = p.y + Math.sin(a) * r;
       const dist = Math.hypot(tx - this.x[g], ty - this.y[g]);
       const dir = Math.atan2(ty - this.y[g], tx - this.x[g]);
       this.ang[g] = dir;
-      this.shells.push({ side: this.side[g], sx: this.x[g], sy: this.y[g], tx, ty, t0: this.time, dur: dist / SHELL_SPEED + 1, direct: false, target: -1, kind: "he" });
+      this.shells.push({ side: this.side[g], sx: this.x[g], sy: this.y[g], tx, ty, t0: this.time, dur: dist / SHELL_SPEED + 1, direct: false, target: -1, kind: p.kind });
       this.events.gunfire.push(this.x[g], this.y[g], dir, 0);
+      this.lastGunfire[this.side[g]] = this.time;
     }
     this.pending = still;
     // Einschläge
@@ -964,8 +1082,12 @@ export class Battle {
         continue;
       }
       if (s.kind === "he") this.shellImpact(s.tx, s.ty, ARTY_KILL_RADIUS, true);
+      else if (s.kind === "smoke") {
+        this.smokes.push({ x: s.tx, y: s.ty, r: SMOKE_RADIUS, t0: this.time, until: this.time + SMOKE_DURATION });
+        this.events.blasts.push(s.tx, s.ty, 8, 7);
+      } else if (s.kind === "grenade") this.grenadeImpact(s);
       else if (s.target >= 0 && this.alive[s.target] && Math.hypot(this.x[s.target] - s.tx, this.y[s.target] - s.ty) < 14) {
-        const hit = this.rng.next() < (s.kind === "at" ? 0.6 : 0.4);
+        const hit = this.rng.next() < (s.kind === "at" ? 0.6 : 0.4) * (s.acc ?? 1);
         this.events.blasts.push(s.tx, s.ty, 8, 3);
         if (hit) {
           this.damage(s.target, s.kind === "at" ? GUN_DIRECT_DAMAGE : 8, 0);
@@ -988,7 +1110,7 @@ export class Battle {
           this.companyStamp[c.id] = this.stamp;
           if (c.type !== UNIT_MAGE) c.morale -= big ? 2.5 : 1;
         }
-        this.suppress[id] = Math.min(1, this.suppress[id] + 0.6 * (1 - d / supR));
+        this.pin(id, 0.6 * (1 - d / supR));
         if (d > radius) return;
         const type = this.type[id];
         if (STATS[type].armored) {
@@ -997,7 +1119,7 @@ export class Battle {
         }
         const cover = this.terrain.coverAt(this.x[id], this.y[id]);
         const p = 0.85 * (1 - cover * 0.8) * (1 - (d / radius) * 0.5);
-        if (this.rng.next() < p) this.damage(id, type === UNIT_MG || type === UNIT_GUN ? 2 : 1, Math.atan2(this.y[id] - y, this.x[id] - x));
+        if (this.rng.next() < p) this.damage(id, type === UNIT_GUN ? 3 : type === UNIT_MG ? 2 : 1, Math.atan2(this.y[id] - y, this.x[id] - x));
       });
     }
     // Magier in der Luft nur bei Volltreffer
@@ -1027,7 +1149,7 @@ export class Battle {
       for (let s = 0; s < 2; s++) {
         this.grids[s].forEachInRadius(m.x, m.y, MINE_RADIUS + 8, this.x, this.y, (id, d) => {
           if (!this.alive[id]) return;
-          this.suppress[id] = 1;
+          this.pin(id, 1);
           if (STATS[this.type[id]].armored) {
             if (d < 14) this.damage(id, MINE_TANK_DAMAGE, 0);
           } else if (d < MINE_RADIUS && this.rng.next() < 0.9 - d / (MINE_RADIUS * 1.5)) this.damage(id, 2, Math.atan2(this.y[id] - m.y, this.x[id] - m.x));
@@ -1046,7 +1168,7 @@ export class Battle {
       for (let s = 0; s < 2; s++) {
         this.grids[s].forEachInRadius(f.x, f.y, f.r, this.x, this.y, (id) => {
           if (!this.alive[id] || STATS[this.type[id]].armored) return;
-          this.suppress[id] = 1;
+          this.pin(id, 1);
           if (this.rng.next() < 0.5 * dt) this.damage(id, 1, 0);
         });
       }
@@ -1229,6 +1351,7 @@ export class Battle {
       [UNIT_AT]: [1, 16],
       [UNIT_FLAME]: [2, 9],
       [UNIT_GUN]: [1, 44],
+      [UNIT_STORM]: [2, 7],
     };
     const snap = c.type !== UNIT_MAGE && c.type !== UNIT_TANK && c.type !== UNIT_GUN && order !== "storm";
     // Im Graben rücken die Leute enger zusammen, damit alle hineinpassen
@@ -1287,6 +1410,15 @@ export class Battle {
 
 function clamp(v: number, a: number, b: number) {
   return v < a ? a : v > b ? b : v;
+}
+
+function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
 function wrapAngle(a: number) {

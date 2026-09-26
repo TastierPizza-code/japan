@@ -32,6 +32,7 @@ export const UNIT_TANK = 3;
 export const UNIT_AT = 4;
 export const UNIT_FLAME = 5;
 export const UNIT_GUN = 6;
+export const UNIT_STORM = 7;
 
 export interface WeaponStats {
   name: string;
@@ -48,6 +49,10 @@ export interface WeaponStats {
   armored?: boolean;
   /** Radius für Abstand zu anderen Einheiten */
   radius: number;
+  /** Anteil des Niederhaltens, der wirkt (1 = voll, 0.5 = halb so stark) */
+  nerve?: number;
+  /** wirft Handgranaten auf Gegner in Deckung */
+  grenades?: boolean;
 }
 
 export const STATS: Record<number, WeaponStats> = {
@@ -63,6 +68,7 @@ export const STATS: Record<number, WeaponStats> = {
     run: 13,
     fireWhileMoving: false,
     radius: 2.2,
+    grenades: true,
   },
   [UNIT_MG]: {
     name: "Maschinengewehr",
@@ -130,6 +136,22 @@ export const STATS: Record<number, WeaponStats> = {
     fireWhileMoving: false,
     radius: 2.4,
   },
+  [UNIT_STORM]: {
+    name: "Stoßtrupp",
+    range: 260,
+    reload: 3.0,
+    reloadJitter: 1,
+    hit: 0.14,
+    suppress: 0.1,
+    hp: 1,
+    walk: 8.5,
+    run: 15,
+    // Karabiner und Maschinenpistole: schießen im Vorgehen (Feuer und Bewegung)
+    fireWhileMoving: true,
+    radius: 2.2,
+    nerve: 0.45,
+    grenades: true,
+  },
   [UNIT_GUN]: {
     name: "Feldgeschütz",
     range: 700,
@@ -150,16 +172,19 @@ export const MG_PER_SECTION = 4;
 export const MAGES_PER_SQUAD = 4;
 export const GUNS_PER_BATTERY = 4;
 export const TANKS_PER_PLATOON = 3;
+export const STORM_PER_SQUAD = 40;
 export const AT_PER_SQUAD = 8;
 export const FLAME_PER_SQUAD = 10;
 
 /** Treffer-Multiplikator, wenn auf fliegende Magier geschossen wird. */
 export const MAGE_EVASION = 0.3;
 export const MAGE_SPELL_RADIUS = 14;
+/** Trefferchance eines Zaubers mitten im Wirkungskreis (ohne Deckung) */
+export const MAGE_SPELL_KILL = 0.45;
 export const MAGE_MANA_MAX = 100;
 export const MAGE_MANA_DRAIN = 0.5; // pro Sekunde im Einsatz
 export const MAGE_MANA_PER_SPELL = 2.5; // pro Zauber eines einzelnen Magiers
-export const MAGE_MANA_REGEN = 6; // pro Sekunde zu Hause
+export const MAGE_MANA_REGEN = 2.5; // pro Sekunde zu Hause
 export const MAGE_SHIELD_REGEN = 0.6;
 
 export const MELEE_RANGE = 6;
@@ -185,6 +210,19 @@ export const MINE_TRIGGER = 4;
 export const MINE_RADIUS = 8;
 export const MINE_TANK_DAMAGE = 20;
 
+// Nebel: Schüsse durch Rauch treffen kaum
+export const SMOKE_RADIUS = 50;
+/** Flankenfeuer: Wer von der Seite (längs des Grabens) beschossen wird, hat nur diesen Anteil seiner Deckung */
+export const ENFILADE_COVER = 0.45;
+export const SMOKE_DURATION = 80;
+export const SMOKE_BLOCK = 0.85; // so stark sinkt die Trefferchance mitten durch dichten Nebel
+export const WIND = 2.5; // Nebel treibt langsam nach rechts
+
+// Handgranaten
+export const GRENADE_RANGE = 28;
+export const GRENADE_RADIUS = 5.5;
+export const GRENADE_RELOAD = 9;
+
 // Flammenwerfer
 export const FLAME_CONE = 0.45; // halber Öffnungswinkel in Radiant
 export const FIRE_DURATION = 7;
@@ -192,6 +230,8 @@ export const FIRE_DURATION = 7;
 export const RESERVE_COOLDOWN = 60;
 export const START_RESERVES = 2;
 
+/** Moralverlust, wenn die ganze Kompanie fiele (je Gefallenem anteilig). Bei gut 60 % Verlusten bricht ein Sturm zusammen. */
+export const MORALE_PER_LOSS = 130;
 export const MORALE_ROUT = 20;
 export const MORALE_ROUT_STORM = 12;
 export const MORALE_RALLY = 50;
