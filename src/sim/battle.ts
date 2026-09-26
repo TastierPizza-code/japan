@@ -322,7 +322,7 @@ export class Battle {
       for (const x of [240, 800, 1360]) this.createCompany(s, UNIT_STORM, s === 0 ? "Stoßtrupp" : "Corps franc", x, t.supportY(s, x), STORM_PER_SQUAD);
       for (const x of [400, 1200]) this.createCompany(s, UNIT_FLAME, s === 0 ? "Flammenwerfer" : "Lance-flammes", x, t.supportY(s, x), FLAME_PER_SQUAD);
       for (const x of [500, 1100]) {
-        const y = (t.supportY(s, x) + GUN_Y[s]) / 2 + FORWARD[s] * 10;
+        const y = this.tankPark(s, x);
         this.createCompany(s, UNIT_TANK, s === 0 ? "Panzerzug" : "Chars d'assaut", x, y, TANKS_PER_PLATOON);
       }
       [400, 800, 1200].forEach((x, i) => this.createCompany(s, UNIT_GUN, s === 0 ? `${i + 1}. Batterie` : `${i + 1}e Batterie`, x, GUN_Y[s], GUNS_PER_BATTERY));
@@ -347,7 +347,7 @@ export class Battle {
       this.createCompany(s, UNIT_AT, s === 0 ? "Tankgewehr-Trupp" : "Fusils antichar", WORLD_W / 2 + 120, t.frontY(s, WORLD_W / 2 + 120), AT_PER_SQUAD);
       this.createCompany(s, UNIT_FLAME, s === 0 ? "Flammenwerfer" : "Lance-flammes", WORLD_W / 2 - 150, t.supportY(s, WORLD_W / 2 - 150), FLAME_PER_SQUAD);
       this.createCompany(s, UNIT_STORM, s === 0 ? "Stoßtrupp" : "Corps franc", WORLD_W / 2 + 150, t.supportY(s, WORLD_W / 2 + 150), STORM_PER_SQUAD);
-      const tankY = (t.supportY(s, WORLD_W / 2) + GUN_Y[s]) / 2;
+      const tankY = this.tankPark(s, WORLD_W / 2);
       this.createCompany(s, UNIT_TANK, s === 0 ? "Panzerzug" : "Chars d'assaut", WORLD_W / 2, tankY, TANKS_PER_PLATOON);
       this.createCompany(s, UNIT_GUN, s === 0 ? "1. Batterie" : "1re Batterie", WORLD_W / 2 - 250, GUN_Y[s], GUNS_PER_BATTERY);
       this.createCompany(s, UNIT_GUN, s === 0 ? "2. Batterie" : "2e Batterie", WORLD_W / 2 + 250, GUN_Y[s], GUNS_PER_BATTERY);
@@ -357,6 +357,12 @@ export class Battle {
   }
 
   /** Gute Plätze für MGs: Bunker der Seite, sonst an den Flankengrenzen */
+  /** Bereitstellung der Panzer: dicht hinter dem Unterstützungsgraben, damit sie rechtzeitig vorn sind */
+  tankPark(side: number, x: number): number {
+    const sy = this.terrain.supportY(side, x);
+    return sy + (GUN_Y[side] - sy) * 0.22;
+  }
+
   mgSpots(side: number): { x: number; y: number }[] {
     const b = this.terrain.bunkers.filter((k) => k.side === side).map((k) => ({ x: k.x, y: k.y }));
     const fallback = [WORLD_W / 3, (WORLD_W * 2) / 3].map((x) => ({ x, y: this.terrain.frontY(side, x) }));

@@ -163,7 +163,7 @@ export class FrontBattle {
           if (spare >= 1) {
             const slot = slotOf(UNIT_TANK);
             const x = LANES[slot % 3];
-            spawn(UNIT_TANK, `Pz ${num}`, x, (t.supportY(bs, x) + GUN_Y[bs]) / 2, spare);
+            spawn(UNIT_TANK, `Pz ${num}`, x, b.tankPark(bs, x), spare);
           }
         } else if (d.kind === "at") {
           if (spare >= 1) {
