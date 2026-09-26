@@ -37,6 +37,8 @@ export const UNIT_STORM = 7;
 export interface WeaponStats {
   name: string;
   range: number;
+  /** Wie stark die Trefferchance bis zur vollen Reichweite abfällt (Standard 0,75) */
+  falloff?: number;
   reload: number; // Sekunden
   reloadJitter: number;
   hit: number; // Basis-Trefferchance
@@ -75,7 +77,9 @@ export const STATS: Record<number, WeaponStats> = {
     range: 450,
     reload: 0.3,
     reloadJitter: 0.1,
-    hit: 0.05,
+    hit: 0.07,
+    // flache Geschossbahn, bestreicht das Vorfeld: Treffer fallen auf Entfernung weniger ab
+    falloff: 0.5,
     suppress: 0.12,
     hp: 3,
     walk: 4,
@@ -216,7 +220,14 @@ export const SMOKE_RADIUS = 60;
 export const ENFILADE_COVER = 0.45;
 export const SMOKE_DURATION = 80;
 export const SMOKE_BLOCK = 0.85; // so stark sinkt die Trefferchance mitten durch dichten Nebel
-export const WIND = 2.5; // Nebel treibt langsam nach rechts
+export const WIND = 2.5;
+/** Gas: gelbgrüne Wolke, treibt mit dem Wind. Mit Maske schießt man schlecht, ein paar fallen trotzdem aus. */
+export const GAS_RADIUS = 48;
+export const GAS_DURATION = 75;
+/** Chance je Sekunde, dass ein Mann mitten in der Wolke ausfällt (Maske zu spät, undicht) */
+export const GAS_CASUALTY_RATE = 0.006;
+/** Niederhalten je Sekunde in der Wolke (Maske auf, husten, kaum Sicht) */
+export const GAS_SUPPRESS = 0.18; // Nebel treibt langsam nach rechts
 
 // Handgranaten
 export const GRENADE_RANGE = 28;

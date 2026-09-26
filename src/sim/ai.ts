@@ -21,6 +21,8 @@ interface Attack {
   planned: boolean;
   /** Begleit-MGs sind in den Einbruch nachgezogen */
   mgsForward?: boolean;
+  /** Gas auf den Unterstützungsgraben ist geschossen */
+  gassed?: boolean;
   /** Kompanie der zweiten Welle und ob sie schon stürmt */
   wave?: number;
   waveSent?: boolean;
@@ -263,8 +265,14 @@ export class BattleAI {
       a.stage = "approach";
       a.timer = 0;
     } else if (a.stage === "approach") {
-      // Vorbereitungsfeuer auf den Einbruchsabschnitt – eine Batterie bleibt für den Nebel frei
-      if (this.veteran && b.sides[this.side].artyCharges >= 2) b.callArtillery(this.side, a.lane, enemyFront(a.lane), "he");
+      // Vorbereitung – eine Batterie bleibt für den Nebel frei:
+      // zuerst Gas auf den feindlichen Unterstützungsgraben (von dort kommt der Gegenstoß), dann Sprengfeuer
+      if (this.veteran && b.sides[this.side].artyCharges >= 2) {
+        if (!a.gassed) {
+          a.gassed = true;
+          b.callArtillery(this.side, a.lane - 60, b.terrain.supportY(enemySide, a.lane), "gas");
+        } else b.callArtillery(this.side, a.lane, enemyFront(a.lane), "he");
+      }
       // Wer in der Ausgangsstellung wartet, liegt unter Feuer: nicht auf die letzten Nachzügler warten
       const rifles = foot.filter((c) => c.type === UNIT_RIFLE);
       const there = rifles.filter((c) => Math.abs(c.cy - jumpY(c.cx)) < 80).length;
@@ -442,8 +450,8 @@ export class BattleAI {
     const a = this.attack;
     if (!a) return null;
     const where = LANE_NAMES[laneOf(a.lane)];
-    const what = { prep: "Draht wird zerschossen", approach: "Bereitstellung", smoke: "Nebel", storm: "Sturm" }[a.stage];
-    return `Angriff ${where}: ${what}`;
+    const what = { prep: "Draht", approach: "Bereitstellung", smoke: "Nebel", storm: "Sturm" }[a.stage];
+    return `⚔ ${where}: ${what}`;
   }
 
   /** Laufenden Angriff abbrechen: alle zurück in die Ausgangsstellung */

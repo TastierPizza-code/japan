@@ -46,6 +46,10 @@ import {
   SMOKE_BLOCK,
   SMOKE_DURATION,
   SMOKE_RADIUS,
+  GAS_CASUALTY_RATE,
+  GAS_DURATION,
+  GAS_RADIUS,
+  GAS_SUPPRESS,
   STORM_PER_SQUAD,
   START_RESERVES,
   STATS,
@@ -125,7 +129,7 @@ export interface Shell {
   direct: boolean;
   /** Ziel bei Direktschuss (Panzer), sonst -1 */
   target: number;
-  kind: "he" | "smoke" | "cannon" | "at" | "grenade";
+  kind: "he" | "smoke" | "gas" | "cannon" | "at" | "grenade";
   /** Trefferfaktor bei Direktschuss (Nebel zwischen Schütze und Ziel) */
   acc?: number;
 }
@@ -137,6 +141,8 @@ export interface Smoke {
   r: number;
   t0: number;
   until: number;
+  /** Gaswolke statt Nebel: blockiert keine Sicht, setzt aber zu */
+  gas?: boolean;
 }
 
 interface PendingShot {
@@ -144,7 +150,7 @@ interface PendingShot {
   at: number;
   x: number;
   y: number;
-  kind: "he" | "smoke";
+  kind: "he" | "smoke" | "gas";
 }
 
 export interface Fire {
@@ -392,7 +398,7 @@ export class Battle {
   }
 
   /** Feuerschlag: eine bereite Batterie beschießt das Zielgebiet. */
-  callArtillery(side: number, x: number, y: number, kind: "he" | "smoke" = "he"): boolean {
+  callArtillery(side: number, x: number, y: number, kind: "he" | "smoke" | "gas" = "he"): boolean {
     if (this.result) return false;
     x = clamp(x, 0, WORLD_W);
     y = clamp(y, 0, WORLD_H);
@@ -402,7 +408,7 @@ export class Battle {
     let last = 0;
     const guns = battery.members.filter((g) => this.alive[g]);
     guns.forEach((g, gi) => {
-      const shots = kind === "smoke" ? 3 : ARTY_SHELLS_PER_GUN;
+      const shots = kind === "smoke" ? 3 : kind === "gas" ? 2 : ARTY_SHELLS_PER_GUN;
       for (let k = 0; k < shots; k++) {
         const at = this.time + 0.5 + gi * 0.35 + k * ARTY_SHELL_INTERVAL + this.rng.next() * 0.4;
         this.pending.push({ gun: g, at, x, y, kind });
@@ -411,7 +417,7 @@ export class Battle {
         last = Math.max(last, at + flight);
       }
     });
-    battery.readyAt = this.time + (kind === "smoke" ? ARTY_RELOAD * 0.7 : ARTY_RELOAD) + ARTY_SHELLS_PER_GUN * ARTY_SHELL_INTERVAL;
+    battery.readyAt = this.time + (kind === "he" ? ARTY_RELOAD : ARTY_RELOAD * 0.7) + ARTY_SHELLS_PER_GUN * ARTY_SHELL_INTERVAL;
     this.barrages.push({ side, x, y, fireAt: first, until: last });
     return true;
   }
@@ -701,7 +707,7 @@ export class Battle {
     const st = STATS[this.type[i]];
     const tType = this.type[t];
     const sight = this.alongTrench(i, t) ? 0.05 : this.sight(i, t);
-    let p = baseHit * (1 - 0.75 * (dist / st.range)) * (1 - 0.6 * this.suppress[i]) * sight;
+    let p = baseHit * (1 - (st.falloff ?? 0.75) * (dist / st.range)) * (1 - 0.6 * this.suppress[i]) * sight;
     if (tType === UNIT_MAGE) p *= MAGE_EVASION * (this.type[i] === UNIT_MG ? 1.6 : 1);
     else {
       let cover = this.terrain.coverAt(this.x[t], this.y[t]);
@@ -956,6 +962,7 @@ export class Battle {
     // Mehrere Schwaden hintereinander verdichten sich
     let clear = 1;
     for (const sm of this.smokes) {
+      if (sm.gas) continue;
       const d = distToSegment(sm.x, sm.y, x1, y1, x2, y2);
       if (d >= sm.r) continue;
       const age = this.time - sm.t0;
@@ -965,10 +972,32 @@ export class Battle {
     return 1 - clear;
   }
 
+  private gasTimer = 0;
+
   private updateSmoke(dt: number) {
     if (this.smokes.length === 0) return;
     for (const sm of this.smokes) sm.x += WIND * dt;
     this.smokes = this.smokes.filter((sm) => sm.until > this.time);
+    // Gas wirkt alle Viertelsekunde auf alle darin (beide Seiten – der Wind fragt nicht)
+    this.gasTimer += dt;
+    if (this.gasTimer < 0.25) return;
+    const step = this.gasTimer;
+    this.gasTimer = 0;
+    for (const sm of this.smokes) {
+      if (!sm.gas) continue;
+      const age = this.time - sm.t0;
+      const strength = Math.min(1, age / 4) * Math.min(1, (sm.until - this.time) / 15);
+      for (let s = 0; s < 2; s++) {
+        this.grids[s].forEachInRadius(sm.x, sm.y, sm.r, this.x, this.y, (id, d) => {
+          if (!this.alive[id]) return;
+          const t = this.type[id];
+          if (t === UNIT_MAGE || t === UNIT_TANK) return; // Magier schweben darüber, Panzer sind dicht
+          const k = strength * (1 - (d / sm.r) ** 2);
+          this.pin(id, GAS_SUPPRESS * k * step);
+          if (this.rng.next() < GAS_CASUALTY_RATE * k * step) this.damage(id, 1, 0);
+        });
+      }
+    }
   }
 
   private throwGrenade(i: number, t: number) {
@@ -1107,7 +1136,7 @@ export class Battle {
       }
       if (p.gun < 0 || !this.alive[p.gun]) continue;
       const g = p.gun;
-      const r = Math.sqrt(this.rng.next()) * ARTY_SPREAD * (p.kind === "smoke" ? 1.3 : 1);
+      const r = Math.sqrt(this.rng.next()) * ARTY_SPREAD * (p.kind === "he" ? 1 : 1.3);
       const a = this.rng.next() * Math.PI * 2;
       const tx = p.x + Math.cos(a) * r;
       const ty = p.y + Math.sin(a) * r;
@@ -1130,6 +1159,9 @@ export class Battle {
       else if (s.kind === "smoke") {
         this.smokes.push({ x: s.tx, y: s.ty, r: SMOKE_RADIUS, t0: this.time, until: this.time + SMOKE_DURATION });
         this.events.blasts.push(s.tx, s.ty, 8, 7);
+      } else if (s.kind === "gas") {
+        this.smokes.push({ x: s.tx, y: s.ty, r: GAS_RADIUS, t0: this.time, until: this.time + GAS_DURATION, gas: true });
+        this.events.blasts.push(s.tx, s.ty, 8, 8);
       } else if (s.kind === "grenade") this.grenadeImpact(s);
       else if (s.target >= 0 && this.alive[s.target] && Math.hypot(this.x[s.target] - s.tx, this.y[s.target] - s.ty) < 14) {
         const hit = this.rng.next() < (s.kind === "at" ? 0.6 : 0.4) * (s.acc ?? 1);

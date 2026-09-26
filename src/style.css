@@ -774,6 +774,20 @@ button.stance.aggressive {
   flex: 1;
 }
 
+/* Unterstützung: auf schmalen Bildschirmen in zwei Zeilen statt abgeschnitten */
+#support {
+  flex-wrap: wrap;
+}
+
+#support button {
+  flex: 1 1 22%;
+  min-width: 0;
+}
+
+#support #fit {
+  flex: 0 0 auto;
+}
+
 #chips {
   display: flex;
   gap: 6px;

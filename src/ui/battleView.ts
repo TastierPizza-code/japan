@@ -10,7 +10,7 @@ import { STANCE_NAMES, type World } from "../world/world.ts";
 import { bindGestures, watchSize } from "./gestures.ts";
 import { Overlay, shortName } from "./overlay.ts";
 
-type Mode = "none" | "storm" | "arty" | "smoke" | "plan";
+type Mode = "none" | "storm" | "arty" | "smoke" | "gas" | "plan";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -64,6 +64,7 @@ export class BattleView {
     $("#arty").addEventListener("click", () => this.setMode(this.mode === "arty" ? "none" : "arty"));
     $("#smokeBtn").addEventListener("click", () => this.setMode(this.mode === "smoke" ? "none" : "smoke"));
     $("#planBtn").addEventListener("click", () => this.planButton());
+    $("#gasBtn").addEventListener("click", () => this.setMode(this.mode === "gas" ? "none" : "gas"));
     $("#modecancel").addEventListener("click", () => this.setMode("none"));
     $("#reserve").addEventListener("click", () => {
       this.ctx?.battle.callReserve(PLAYER);
@@ -221,8 +222,8 @@ export class BattleView {
       this.hud();
       return;
     }
-    if (this.mode === "arty" || this.mode === "smoke") {
-      if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "smoke" ? "smoke" : "he")) this.setMode("none");
+    if (this.mode === "arty" || this.mode === "smoke" || this.mode === "gas") {
+      if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "arty" ? "he" : this.mode)) this.setMode("none");
       this.hud();
       return;
     }
@@ -276,6 +277,8 @@ export class BattleView {
         ? "Artillerie: Zielgebiet antippen"
         : m === "plan"
           ? "Angriff: Abschnitt antippen – der Offizier zerschießt den Draht, legt Nebel und stürmt"
+        : m === "gas"
+          ? "Gas: Ziel antippen – gut gegen Reserven und Batterien, treibt nach rechts"
         : m === "smoke"
           ? "Nebel: auf den feindlichen Graben legen, dann stürmen (treibt mit dem Wind nach rechts)"
           : m === "storm"
@@ -283,6 +286,7 @@ export class BattleView {
             : "";
     $("#arty").classList.toggle("on", m === "arty");
     $("#smokeBtn").classList.toggle("on", m === "smoke");
+    $("#gasBtn").classList.toggle("on", m === "gas");
     $("#planBtn").classList.toggle("on", m === "plan");
     $('[data-order="storm"]').classList.toggle("on", m === "storm");
   }
@@ -297,6 +301,7 @@ export class BattleView {
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
     else if (k === "n") this.setMode(this.mode === "smoke" ? "none" : "smoke");
     else if (k === "g") this.planButton();
+    else if (k === "k") this.setMode(this.mode === "gas" ? "none" : "gas");
     else if (k === "v") this.cycleStyle();
     else if (k === "escape" && (this.mode !== "none" || this.selected >= 0)) {
       if (this.mode !== "none") this.setMode("none");
@@ -399,7 +404,7 @@ export class BattleView {
     const plan = $<HTMLButtonElement>("#planBtn");
     const status = this.ctx.officer?.attackStatus();
     plan.hidden = !this.ctx.officer;
-    plan.textContent = status ? `${status} · ✕` : "Angriff planen";
+    plan.textContent = status ? `${status} ✕` : "Angriff planen";
     plan.title = status ? "Angriff abbrechen (G): alle zurück in die Ausgangsstellung" : "Angriff planen (G)";
     const arty = $<HTMLButtonElement>("#arty");
     arty.textContent =
@@ -408,6 +413,7 @@ export class BattleView {
         : `Artillerie ${side.artyCharges}/${side.artyMax}` + (side.artyCharges < side.artyMax ? ` · ${Math.ceil(side.artyTimer)}s` : "");
     arty.disabled = side.artyCharges === 0 && this.mode !== "arty";
     $<HTMLButtonElement>("#smokeBtn").disabled = side.artyCharges === 0 && this.mode !== "smoke";
+    $<HTMLButtonElement>("#gasBtn").disabled = side.artyCharges === 0 && this.mode !== "gas";
     const res = $<HTMLButtonElement>("#reserve");
     res.textContent = `Reserve (${side.reserves})` + (side.reserveCooldown > 0 ? ` ${Math.ceil(side.reserveCooldown)}s` : "");
     res.disabled = side.reserves === 0 || side.reserveCooldown > 0;

@@ -270,6 +270,16 @@ export class GlRenderer {
       this.onSound?.("magicBoom", x, y);
       return;
     }
+    if (kind === 8) {
+      // Gasgranate: kaum Knall, gelbgrüner Schwall
+      for (let j = 0; j < 8; j++) {
+        const a = rnd() * Math.PI * 2;
+        const sp = 8 + rnd() * 20;
+        this.part(x, y, 1, Math.cos(a) * sp, Math.sin(a) * sp, { drag: 1.2, life: 2.5 + rnd() * 2, s0: 6, s1: 24, c: [0.7, 0.78, 0.3, 0.45], mode: M_SOFT, top: true });
+      }
+      this.onSound?.("smokePop", x, y);
+      return;
+    }
     if (kind === 7) {
       // Nebelgranate: dumpfer Knall, weißer Qualm quillt auf (die Wolke selbst zeichnet drawSmoke)
       for (let j = 0; j < 10; j++) {
@@ -520,7 +530,8 @@ export class GlRenderer {
         const oy = Math.sin(ph * 1.3) * sm.r * 0.35 + Math.cos(this.time * 0.25 + ph) * 3;
         const size = sm.r * grow * (1.1 + 0.25 * Math.sin(ph * 3.1));
         const g = 0.84 + 0.06 * Math.sin(ph * 5);
-        this.shape(sm.x + ox, sm.y + oy, size * 2, M_SOFT, g, g, g * 0.97, 0.32 * fade);
+        if (sm.gas) this.shape(sm.x + ox, sm.y + oy, size * 2, M_SOFT, 0.72 * g, 0.8 * g, 0.3 * g, 0.26 * fade);
+        else this.shape(sm.x + ox, sm.y + oy, size * 2, M_SOFT, g, g, g * 0.97, 0.32 * fade);
       }
     }
   }
