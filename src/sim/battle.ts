@@ -33,6 +33,7 @@ import {
   MINE_TANK_DAMAGE,
   MINE_TRIGGER,
   MORALE_PER_LOSS,
+  ARTY_DEPTH,
   ODDS_RADIUS,
   RUNNING_TARGET,
   MAGE_SPELL_KILL,
@@ -423,10 +424,16 @@ export class Battle {
   }
 
   /** Feuerschlag: eine bereite Batterie beschießt das Zielgebiet. */
+  /** Reicht die Artillerie dorthin? Nur bis knapp hinter den feindlichen vorderen Graben. */
+  inArtyRange(side: number, x: number, y: number): boolean {
+    return (y - this.terrain.frontY(1 - side, x)) * FORWARD[side] <= ARTY_DEPTH;
+  }
+
   callArtillery(side: number, x: number, y: number, kind: "he" | "smoke" | "gas" = "he"): boolean {
     if (this.result) return false;
     x = clamp(x, 0, WORLD_W);
     y = clamp(y, 0, WORLD_H);
+    if (!this.inArtyRange(side, x, y)) return false;
     const battery = this.companies.find((c) => c.side === side && c.type === UNIT_GUN && c.alive > 0 && c.readyAt <= this.time);
     if (!battery) return false;
     let first = Infinity;
@@ -1261,7 +1268,8 @@ export class Battle {
           return;
         }
         const cover = this.terrain.coverAt(this.x[id], this.y[id]);
-        const p = 0.85 * (1 - cover * 0.8) * (1 - (d / radius) * 0.5);
+        // Im Graben oder Bunker hält Artillerie vor allem nieder – tödlich ist sie im Freien
+        const p = 0.85 * (1 - cover) ** 2 * (1 - (d / radius) * 0.5);
         if (this.rng.next() < p) this.damage(id, type === UNIT_GUN ? 3 : type === UNIT_MG ? 2 : 1, Math.atan2(this.y[id] - y, this.x[id] - x));
       });
     }

@@ -322,11 +322,11 @@ export class BattleAI {
       a.timer = 0;
     } else if (a.stage === "approach") {
       // Vorbereitung – eine Batterie bleibt für den Nebel frei:
-      // zuerst Gas auf den feindlichen Unterstützungsgraben (von dort kommt der Gegenstoß), dann Sprengfeuer
+      // zuerst Gas auf den feindlichen Graben (verweht bis zum Sturm), dann Sprengfeuer
       if (this.veteran && b.sides[this.side].artyCharges >= 2) {
         if (!a.gassed) {
           a.gassed = true;
-          b.callArtillery(this.side, a.lane - 60, b.terrain.supportY(enemySide, a.lane), "gas");
+          b.callArtillery(this.side, a.lane - 60, enemyFront(a.lane), "gas");
         } else b.callArtillery(this.side, a.lane, enemyFront(a.lane), "he");
       }
       if (!a.infantryGo) {
@@ -404,9 +404,11 @@ export class BattleAI {
         const lead = Math.min(...foot.map((c) => Math.abs(c.cy - enemyFront(c.cx))));
         if (lead > 170) b.callArtillery(this.side, a.breach, enemyFront(a.breach), "he");
         else if (brokeIn) {
-          // Abriegelungsfeuer: hinter den genommenen Abschnitt, dorthin, wo der Gegenstoß herkommt
-          const y = b.terrain.supportY(enemySide, a.breach);
-          if (this.clearOfOwn(b, a.breach, y, 120)) b.callArtillery(this.side, a.breach, y, "he");
+          // Abriegelungsfeuer auf die Nachbarabschnitte des Einbruchs, von dort kommt der Gegenstoß
+          for (const dx of [-220, 220]) {
+            const x = a.breach + dx;
+            if (arty() && this.clearOfOwn(b, x, enemyFront(x), 120)) b.callArtillery(this.side, x, enemyFront(x), "he");
+          }
         }
       }
       // Zweite Welle: aus der Ausgangsstellung in den Einbruch
@@ -649,7 +651,7 @@ export class BattleAI {
     let best: Company | null = null;
     let bestScore = 70;
     for (const c of foe) {
-      if (c.type === UNIT_MAGE) continue;
+      if (c.type === UNIT_MAGE || !b.inArtyRange(this.side, c.cx, c.cy)) continue;
       const inOpen = b.terrain.coverAt(c.cx, c.cy) < 0.5;
       let score = c.alive * (inOpen ? 1.6 : 0.4);
       if (c.type === UNIT_MG) score = 90;

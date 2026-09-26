@@ -345,9 +345,10 @@ class App {
       </ul>
       <h3>Artillerie</h3>
       <ul>
-        <li><b>Sprengfeuer</b> (A): gegen Truppen im Freien und MG-Nester.</li>
+        <li>Die Geschütze reichen nur bis knapp hinter den <b>feindlichen vorderen Graben</b> (gelbe Linie im Artilleriemodus).</li>
+        <li><b>Sprengfeuer</b> (A): tödlich für Truppen im Freien, im Graben hält es vor allem nieder. Ideal gegen Stürme und kurz vor dem eigenen Sturm.</li>
         <li><b>Nebel</b> (N): auf den feindlichen Graben legen, dann sehen die Verteidiger erst auf wenige Meter.</li>
-        <li><b>Gas</b> (K): auf Reserven und Batterien. Es treibt nach rechts, auch zu den eigenen Leuten.</li>
+        <li><b>Gas</b> (K): auf den feindlichen Graben, lange vor dem eigenen Sturm. Es treibt nach rechts, auch zu den eigenen Leuten.</li>
         <li>Solange du zuschaust, halten die Offiziere <b>eine Batterie für dich frei</b>. Nutze sie als Sperrfeuer,
         wenn „Feind stürmt!“ gemeldet wird.</li>
       </ul>

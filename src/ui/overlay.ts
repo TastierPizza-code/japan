@@ -1,5 +1,5 @@
 import type { Battle, Company } from "../sim/battle.ts";
-import { ARTY_SPREAD, OBJECTIVE_RADIUS, PLAYER, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_STORM, UNIT_TANK } from "../sim/config.ts";
+import { ARTY_DEPTH, ARTY_SPREAD, FORWARD, OBJECTIVE_RADIUS, WORLD_W, PLAYER, STATS, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_STORM, UNIT_TANK } from "../sim/config.ts";
 import type { Camera } from "../render/camera.ts";
 
 const PC = "#8cb8f2";
@@ -19,9 +19,19 @@ export class Overlay {
     this.onSelect = onSelect;
   }
 
-  update(b: Battle, cam: Camera, selected: number, plan: { lane: number; breach: number; stage: string; label: string } | null = null) {
+  update(b: Battle, cam: Camera, selected: number, plan: { lane: number; breach: number; stage: string; label: string } | null = null, artyRange = false) {
     const z = cam.zoom;
     const parts: string[] = [];
+
+    // Artilleriemodus: Grenze der Reichweite (knapp hinter dem feindlichen vorderen Graben)
+    if (artyRange) {
+      const pts: string[] = [];
+      for (let x = 0; x <= WORLD_W; x += 40) {
+        const p = cam.toScreen(x, b.terrain.frontY(1 - PLAYER, x) + FORWARD[PLAYER] * ARTY_DEPTH);
+        pts.push(`${pts.length ? "L" : "M"}${p.x} ${p.y}`);
+      }
+      parts.push(`<path d="${pts.join("")}" fill="none" stroke="#ffd070" stroke-width="2" stroke-dasharray="8 6" opacity=".8"/>`);
+    }
 
     // Eigener Angriffsplan: Pfeil von der eigenen Stellung zur Einbruchstelle
     if (plan) {

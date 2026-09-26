@@ -201,6 +201,8 @@ export const ARTY_SHELL_INTERVAL = 1.6;
 export const ARTY_SPREAD = 55;
 export const ARTY_KILL_RADIUS = 16;
 export const ARTY_SUPPRESS_RADIUS = 45;
+/** So weit hinter den feindlichen vorderen Graben reicht die Artillerie (Einheiten) */
+export const ARTY_DEPTH = 45;
 export const ARTY_RELOAD = 75; // Batterie braucht so lange bis zum nächsten Feuerschlag
 export const SHELL_SPEED = 320; // Einheiten pro Sekunde (Flugzeit)
 

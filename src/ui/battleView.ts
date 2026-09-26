@@ -177,7 +177,8 @@ export class BattleView {
     this.gl.selected = this.selected;
     this.gl.render(b, this.cam, this.dpr, simDt);
     const plan = off && !this.ctx.spectator ? off.attackPlan() : null;
-    this.overlay.update(b, this.cam, this.selected, plan ? { ...plan, label: off!.attackStatus() ?? "" } : null);
+    const artyMode = this.mode === "arty" || this.mode === "smoke" || this.mode === "gas";
+    this.overlay.update(b, this.cam, this.selected, plan ? { ...plan, label: off!.attackStatus() ?? "" } : null, artyMode);
     this.cam.x -= sx;
     this.cam.y -= sy;
     this.updateScale();
@@ -255,7 +256,8 @@ export class BattleView {
       return;
     }
     if (this.mode === "arty" || this.mode === "smoke" || this.mode === "gas") {
-      if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "arty" ? "he" : this.mode)) this.setMode("none");
+      if (!b.inArtyRange(PLAYER, w.x, w.y)) $("#modetext").textContent = "Außer Reichweite – die Geschütze reichen nur bis zum feindlichen vorderen Graben";
+      else if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "arty" ? "he" : this.mode)) this.setMode("none");
       this.hud();
       return;
     }
