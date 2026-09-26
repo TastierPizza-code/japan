@@ -5,8 +5,6 @@ import { BattleAI } from "../src/sim/ai.ts";
 import { Battle } from "../src/sim/battle.ts";
 import { TICK } from "../src/sim/config.ts";
 
-declare const process: { argv: string[] };
-
 const seed = Number(process.argv[2] ?? 1);
 const maxMinutes = Number(process.argv[3] ?? 40);
 

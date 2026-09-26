@@ -8,10 +8,17 @@
     "build": "tsc --noEmit && vite build",
     "start": "vite build && vite preview --host --port 8080",
     "typecheck": "tsc --noEmit",
-    "sim": "node scripts/headless.ts"
+    "sim": "node scripts/headless.ts",
+    "genmap": "node scripts/genmap.ts",
+    "worldsim": "node scripts/worldsim.ts"
   },
   "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^26.6.3",
+    "@types/topojson-client": "^3.1.5",
+    "topojson-client": "^3.1.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.1",
+    "world-atlas": "^2.0.2"
   }
 }

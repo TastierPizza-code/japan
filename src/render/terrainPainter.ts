@@ -22,6 +22,11 @@ export class TerrainPainter {
     this.paintTrenches(terrain);
   }
 
+  /** Gefallene aus einer laufenden Schlacht nachtragen (x, y, Seite). */
+  corpses(list: number[]) {
+    for (let i = 0; i < list.length; i += 3) this.corpse(list[i], list[i + 1], list[i + 2]);
+  }
+
   private paintGround() {
     const img = this.ctx.createImageData(WORLD_W, WORLD_H);
     const d = img.data;

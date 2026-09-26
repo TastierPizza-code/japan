@@ -63,6 +63,10 @@ export interface Company {
   cy: number;
   lastLoss: number;
   mana: number;
+  /** Division der Kampagne, aus der die Kompanie stammt (-1 = keine) */
+  division: number;
+  /** Spieler hat direkt befohlen → KI-Offizier lässt die Kompanie in Ruhe */
+  manual: boolean;
 }
 
 export interface Barrage {
@@ -86,6 +90,7 @@ export interface Objective {
 
 export interface SideState {
   artyCharges: number;
+  artyMax: number;
   artyTimer: number;
   reserves: number;
   reserveCooldown: number;
@@ -148,9 +153,22 @@ export class Battle {
   private companyStamp: number[] = [];
   private stamp = 0;
 
-  constructor(seed = 1) {
+  /** Kampagnenmodus: kein fester Aufbau, kein Sieg – Truppen kommen aus der Kampagne. */
+  campaign: boolean;
+  /** Gefallene (x, y, Seite) – damit das Bild beim Öffnen wieder aufgebaut werden kann */
+  corpses: number[] = [];
+
+  constructor(seed = 1, opts: { campaign?: boolean } = {}) {
     this.rng = new Rng(seed);
     this.terrain = new Terrain(this.rng);
+    this.campaign = opts.campaign ?? false;
+    if (this.campaign) {
+      for (let s = 0; s < 2; s++) {
+        this.sides.push({ artyCharges: 0, artyMax: 0, artyTimer: ARTY_RECHARGE, reserves: 0, reserveCooldown: 0, initialStrength: 0 });
+        for (const x of [200, 600, 1000]) this.objectives.push({ x, y: TRENCH_Y[s], owner: s, capture: 0, capturer: -1 });
+      }
+      return;
+    }
     const names = [
       ["1. Kompanie", "2. Kompanie", "3. Kompanie", "4. Kompanie", "5. Kompanie", "6. Kompanie"],
       ["1re Cie", "2e Cie", "3e Cie", "4e Cie", "5e Cie", "6e Cie"],
@@ -164,6 +182,7 @@ export class Battle {
       this.createCompany(s, UNIT_MAGE, s === 0 ? "Magier „Sturmvogel“" : "Mages „Corbeau“", 600, REAR_Y[s], MAGES_PER_SQUAD);
       this.sides.push({
         artyCharges: ARTY_CHARGES,
+        artyMax: ARTY_CHARGES,
         artyTimer: ARTY_RECHARGE,
         reserves: START_RESERVES,
         reserveCooldown: 0,
@@ -252,12 +271,16 @@ export class Battle {
     if (this.result) return;
     this.time += dt;
     this.rebuildGrids();
+    if (this.n > 3000 && this.idCount[0] + this.idCount[1] < this.n * 0.5) {
+      this.compact();
+      this.rebuildGrids();
+    }
     this.updateSoldiers(dt);
     this.updateCompanies(dt);
     this.updateBarrages();
     this.updateSides(dt);
     this.updateObjectives(dt);
-    if (Math.floor(this.time) !== Math.floor(this.time - dt)) this.checkVictory();
+    if (!this.campaign && Math.floor(this.time) !== Math.floor(this.time - dt)) this.checkVictory();
   }
 
   clearEvents() {
@@ -274,6 +297,38 @@ export class Battle {
       if (c.side === side && c.type !== UNIT_MAGE) n += c.alive;
     }
     return n;
+  }
+
+  /** Plätze gefallener Soldaten freigeben, damit lange Gefechte nicht langsamer werden. */
+  private compact() {
+    const oldN = this.n;
+    const map = new Int32Array(oldN).fill(-1);
+    const arrays = [
+      this.x, this.y, this.tx, this.ty, this.hp, this.reload, this.think, this.suppress,
+      this.tgt, this.side, this.type, this.alive, this.moving, this.comp,
+    ];
+    let k = 0;
+    for (let i = 0; i < oldN; i++) {
+      if (!this.alive[i]) continue;
+      map[i] = k;
+      if (k !== i) for (const a of arrays) a[k] = a[i];
+      k++;
+    }
+    for (let i = 0; i < k; i++) {
+      const t = this.tgt[i];
+      this.tgt[i] = t >= 0 && t < oldN ? map[t] : -1;
+    }
+    this.alive.fill(0, k, oldN);
+    for (const c of this.companies) {
+      if (c.alive <= 0) {
+        c.members = [];
+        continue;
+      }
+      const next: number[] = [];
+      for (const m of c.members) if (map[m] >= 0) next.push(map[m]);
+      c.members = next;
+    }
+    this.n = k;
   }
 
   private rebuildGrids() {
@@ -445,6 +500,7 @@ export class Battle {
     if (c.type === UNIT_RIFLE) c.morale -= 60 / c.initial;
     else if (c.type === UNIT_MG) c.morale -= 12;
     this.events.deaths.push(this.x[id], this.y[id], this.side[id], this.type[id]);
+    if (this.corpses.length < 90000) this.corpses.push(this.x[id], this.y[id], this.side[id]);
   }
 
   private updateCompanies(dt: number) {
@@ -532,7 +588,7 @@ export class Battle {
   private updateSides(dt: number) {
     for (const s of this.sides) {
       s.reserveCooldown = Math.max(0, s.reserveCooldown - dt);
-      if (s.artyCharges < ARTY_CHARGES) {
+      if (s.artyCharges < s.artyMax) {
         s.artyTimer -= dt;
         if (s.artyTimer <= 0) {
           s.artyCharges++;
@@ -590,6 +646,27 @@ export class Battle {
 
   // ------------------------------------------------------------ Aufstellung
 
+  /**
+   * Neue Kompanie aus der Kampagne. Mit teleport steht sie sofort an (x, y),
+   * sonst marschiert sie vom hinteren Rand dorthin.
+   */
+  spawnCompany(side: number, type: number, name: string, x: number, y: number, size: number, division: number, teleport: boolean) {
+    const c = this.createCompany(side, type, name, x, teleport ? y : REAR_Y[side], size);
+    c.division = division;
+    c.homeX = x;
+    c.homeY = y;
+    if (!teleport) this.setTarget(c, x, y, "advance");
+    return c;
+  }
+
+  /** Kompanie verlässt das Gefecht (verlegt), ohne dass jemand stirbt. */
+  withdrawCompany(id: number) {
+    const c = this.companies[id];
+    if (!c) return;
+    for (const m of c.members) this.alive[m] = 0;
+    c.alive = 0;
+  }
+
   private createCompany(side: number, type: number, name: string, x: number, y: number, size: number): Company {
     const c: Company = {
       id: this.companies.length,
@@ -609,6 +686,8 @@ export class Battle {
       cy: y,
       lastLoss: -100,
       mana: MAGE_MANA_MAX,
+      division: -1,
+      manual: false,
     };
     this.companies.push(c);
     this.companyStamp.push(0);

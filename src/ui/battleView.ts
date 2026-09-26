@@ -1,0 +1,362 @@
+import type { Stance } from "../sim/ai.ts";
+import type { Battle, Company } from "../sim/battle.ts";
+import { PLAYER, RESERVE_COOLDOWN, TRENCH_Y, UNIT_MAGE } from "../sim/config.ts";
+import { Camera } from "../render/camera.ts";
+import { GlRenderer } from "../render/glRenderer.ts";
+import { TerrainPainter } from "../render/terrainPainter.ts";
+import { STANCE_NAMES, type World } from "../world/world.ts";
+import { bindGestures, watchSize } from "./gestures.ts";
+import { Overlay, shortName } from "./overlay.ts";
+
+type Mode = "none" | "storm" | "arty";
+
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+
+export interface BattleContext {
+  battle: Battle;
+  /** Kampagne: die Welt und der Frontpunkt, zu dem die Schlacht gehört */
+  world?: World;
+  pointId?: number;
+  /** Der Spieler führt keine Seite (fremde Schlacht) */
+  spectator: boolean;
+}
+
+const STANCE_ORDER: Stance[] = ["hold", "defensive", "balanced", "aggressive"];
+const LANE_NAMES = ["Links", "Mitte", "Rechts"];
+
+/** Ansicht einer laufenden Schlacht: Darstellung, Auswahl und Befehle. */
+export class BattleView {
+  ctx: BattleContext | null = null;
+  cam = new Camera();
+  selected = -1;
+  mode: Mode = "none";
+  private gl: GlRenderer;
+  private painter: TerrainPainter | null = null;
+  private overlay!: Overlay;
+  private bg = $<HTMLCanvasElement>("#bg");
+  private bgCtx = this.bg.getContext("2d")!;
+  private stage = $("#stage");
+  private dpr = Math.min(2, window.devicePixelRatio || 1);
+  private chipEls = new Map<number, HTMLButtonElement>();
+  private resize: () => void;
+
+  constructor() {
+    this.gl = new GlRenderer($<HTMLCanvasElement>("#gl"));
+    this.resize = watchSize(this.stage, [this.bg, $<HTMLCanvasElement>("#gl")], this.dpr, this.cam);
+    bindGestures(this.stage, () => this.cam, (x, y) => this.tap(x, y));
+    document.querySelectorAll<HTMLButtonElement>("#orders button").forEach((b) =>
+      b.addEventListener("click", () => this.order(b.dataset.order!)),
+    );
+    $("#arty").addEventListener("click", () => this.setMode(this.mode === "arty" ? "none" : "arty"));
+    $("#modecancel").addEventListener("click", () => this.setMode("none"));
+    $("#reserve").addEventListener("click", () => {
+      this.ctx?.battle.callReserve(PLAYER);
+      this.hud();
+    });
+    $("#fit").addEventListener("click", () => this.cam.fit());
+    $("#flankRow").addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-lane]");
+      if (btn) this.cycleStance(+btn.dataset.lane!);
+    });
+  }
+
+  get battle() {
+    return this.ctx!.battle;
+  }
+
+  open(ctx: BattleContext) {
+    this.ctx = ctx;
+    this.painter = new TerrainPainter(ctx.battle.terrain);
+    this.painter.corpses(ctx.battle.corpses);
+    ctx.battle.clearEvents();
+    this.gl.reset();
+    this.selected = -1;
+    this.setMode("none");
+    $("#flags").innerHTML = "";
+    $("#chips").innerHTML = "";
+    this.chipEls.clear();
+    this.overlay = new Overlay($("#overlay") as unknown as SVGSVGElement, $("#flags"), (id) => this.select(id));
+    this.stage.hidden = false;
+    $("#panel").hidden = false;
+    this.resize();
+    this.cam.fit();
+    const campaign = !!ctx.world;
+    $("#reserve").hidden = campaign;
+    $("#officerBtn").hidden = !campaign;
+    $("#orders").hidden = ctx.spectator;
+    $("#support").hidden = ctx.spectator;
+    this.hud();
+  }
+
+  close() {
+    this.ctx = null;
+    this.painter = null;
+    this.stage.hidden = true;
+    $("#panel").hidden = true;
+    $("#modebar").hidden = true;
+  }
+
+  /** Einmal pro Bild: Ereignisse übernehmen und zeichnen. */
+  frame(simDt: number) {
+    if (!this.ctx || !this.painter) return;
+    const b = this.battle;
+    const e = b.events;
+    for (let i = 0; i < e.deaths.length; i += 4) this.painter.corpse(e.deaths[i], e.deaths[i + 1], e.deaths[i + 2]);
+    for (let i = 0; i < e.craters.length; i += 3) this.painter.crater(e.craters[i], e.craters[i + 1], e.craters[i + 2]);
+    this.gl.ingest(b);
+    b.clearEvents();
+
+    const ctx = this.bgCtx;
+    const z = this.cam.zoom * this.dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#1b1914";
+    ctx.fillRect(0, 0, this.bg.width, this.bg.height);
+    ctx.imageSmoothingEnabled = this.cam.zoom < 1;
+    ctx.setTransform(z, 0, 0, z, -this.cam.x * z, -this.cam.y * z);
+    ctx.drawImage(this.painter.canvas, 0, 0);
+    this.gl.selected = this.selected;
+    this.gl.render(b, this.cam, this.dpr, simDt);
+    this.overlay.update(b, this.cam, this.selected);
+  }
+
+  // ---------------------------------------------------------------- Befehle
+
+  select(id: number) {
+    const c = this.battle.companies[id];
+    if (!c || c.side !== PLAYER || c.alive <= 0 || this.ctx?.spectator) id = -1;
+    this.selected = this.selected === id ? -1 : id;
+    if (this.mode === "storm") this.setMode("none");
+    this.hud();
+  }
+
+  private tap(sx: number, sy: number) {
+    if (!this.ctx || this.ctx.spectator) return;
+    const w = this.cam.toWorld(sx, sy);
+    const b = this.battle;
+    if (this.mode === "arty") {
+      if (b.callArtillery(PLAYER, w.x, w.y)) this.setMode("none");
+      this.hud();
+      return;
+    }
+    const sel = b.companies[this.selected];
+    if (sel && sel.alive > 0) {
+      sel.manual = true;
+      if (this.mode === "storm") {
+        b.orderStorm(sel.id, w.x, w.y);
+        this.setMode("none");
+      } else {
+        b.orderMove(sel.id, w.x, w.y);
+      }
+      this.hud();
+      return;
+    }
+    // Nichts ausgewählt: nächste eigene Kompanie in der Nähe auswählen
+    let best: Company | null = null;
+    let bd = 50 / this.cam.zoom;
+    for (const c of b.companies) {
+      if (c.side !== PLAYER || c.alive <= 0) continue;
+      const d = Math.hypot(c.cx - w.x, c.cy - w.y);
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    if (best) this.select(best.id);
+  }
+
+  order(kind: string) {
+    if (!this.ctx || this.selected < 0) return;
+    const b = this.battle;
+    const c = b.companies[this.selected];
+    if (kind === "officer") {
+      c.manual = false;
+    } else if (kind === "storm") {
+      this.setMode(this.mode === "storm" ? "none" : "storm");
+    } else {
+      c.manual = true;
+      if (kind === "hold") b.orderHold(this.selected);
+      else if (kind === "retreat") b.orderRetreat(this.selected);
+    }
+    this.hud();
+  }
+
+  setMode(m: Mode) {
+    this.mode = m;
+    $("#modebar").hidden = m === "none";
+    $("#modetext").textContent =
+      m === "arty" ? "Artillerie: Zielgebiet antippen" : m === "storm" ? "Sturmangriff: Ziel antippen" : "";
+    $("#arty").classList.toggle("on", m === "arty");
+    $('[data-order="storm"]').classList.toggle("on", m === "storm");
+  }
+
+  key(e: KeyboardEvent): boolean {
+    if (!this.ctx) return false;
+    const k = e.key.toLowerCase();
+    if (k === "h") this.order("hold");
+    else if (k === "s") this.order("storm");
+    else if (k === "r") this.order("retreat");
+    else if (k === "o") this.order("officer");
+    else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
+    else if (k === "escape" && (this.mode !== "none" || this.selected >= 0)) {
+      if (this.mode !== "none") this.setMode("none");
+      else this.select(-1);
+    } else return false;
+    return true;
+  }
+
+  private playerPointSide(): number {
+    const { world, pointId } = this.ctx!;
+    const p = world!.point(pointId!);
+    if (!p || !p.battle) return -1;
+    return p.battle.sideMap[0];
+  }
+
+  private cycleStance(lane: number) {
+    const { world, pointId } = this.ctx!;
+    const p = world?.point(pointId!);
+    if (!p) return;
+    const side = this.playerPointSide();
+    const cur = p.stance[side][lane];
+    const next = STANCE_ORDER[(STANCE_ORDER.indexOf(cur) + 1) % STANCE_ORDER.length];
+    world!.setStance(p.id, side, lane, next);
+    this.hud();
+  }
+
+  // --------------------------------------------------------------------- HUD
+
+  hud() {
+    if (!this.ctx) return;
+    const b = this.battle;
+    const { world, pointId } = this.ctx;
+    const point = world?.point(pointId!);
+
+    if (world && point) {
+      const ps = this.playerPointSide();
+      const mine = point.strength[ps] ?? 0;
+      const theirs = point.strength[1 - ps] ?? 0;
+      const total = mine + theirs;
+      const share = total > 0 ? mine / total : 0.5;
+      const bar = ps === 0 ? point.bar : -point.bar;
+      const nA = world.nations[ps === 0 ? point.a : point.b];
+      const nB = world.nations[ps === 0 ? point.b : point.a];
+      $("#topinfo").innerHTML =
+        `<span style="color:var(--player)">${nA.short} ${fmt(mine)}</span>` +
+        `<span class="capbar" title="Dein Anteil an der Gesamtstärke: ab 70 % rückst du vor, unter 30 % der Feind"><i style="left:${share * 100}%"></i></span>` +
+        `<span style="color:var(--enemy)">${fmt(theirs)} ${nB.short}</span>` +
+        `<small>${Math.round(share * 100)}%${Math.abs(bar) >= 1 ? ` · ${bar > 0 ? "Vormarsch" : "Rückzug"} ${Math.round(Math.abs(bar))}%` : ""}</small>`;
+      // Flanken-Haltungen
+      const flank = $("#flankRow");
+      const principal = ps === 0 ? point.a : point.b;
+      if (!this.ctx.spectator && principal === world.player) {
+        flank.hidden = false;
+        flank.innerHTML = [0, 1, 2]
+          .map((l) => {
+            const s = point.stance[ps][l];
+            return `<button data-lane="${l}" class="stance ${s}"><small>${LANE_NAMES[l]}</small>${STANCE_NAMES[s]}</button>`;
+          })
+          .join("");
+      } else flank.hidden = true;
+    } else {
+      const objs = b.objectives
+        .map((o) => `<i style="background:${o.owner === PLAYER ? "var(--player)" : "var(--enemy)"}"></i>`)
+        .join("");
+      $("#topinfo").innerHTML =
+        `<span style="color:var(--player)">${b.groundStrength(PLAYER)}</span>` +
+        `<span class="objs">${objs}</span>` +
+        `<span style="color:var(--enemy)">${b.groundStrength(1)}</span>`;
+      $("#flankRow").hidden = true;
+    }
+
+    const side = b.sides[PLAYER];
+    const arty = $<HTMLButtonElement>("#arty");
+    arty.textContent =
+      side.artyMax === 0
+        ? "Keine Artillerie"
+        : `Artillerie (${side.artyCharges})` + (side.artyCharges < side.artyMax ? ` ${Math.ceil(side.artyTimer)}s` : "");
+    arty.disabled = side.artyCharges === 0 && this.mode !== "arty";
+    const res = $<HTMLButtonElement>("#reserve");
+    res.textContent = `Reserve (${side.reserves})` + (side.reserveCooldown > 0 ? ` ${Math.ceil(side.reserveCooldown)}s` : "");
+    res.disabled = side.reserves === 0 || side.reserveCooldown > 0;
+    res.title = `Neue Kompanie von hinten, danach ${RESERVE_COOLDOWN}s Wartezeit`;
+
+    const sel = b.companies[this.selected];
+    if (sel && sel.alive <= 0) this.selected = -1;
+    const hasSel = this.selected >= 0;
+    document.querySelectorAll<HTMLButtonElement>("#orders button").forEach((btn) => {
+      btn.disabled = !hasSel || sel.order === "rout" || (btn.dataset.order === "officer" && !sel.manual);
+    });
+    $("#selinfo").innerHTML = this.ctx.spectator
+      ? "Fremde Schlacht – du schaust nur zu."
+      : hasSel
+        ? this.describe(sel)
+        : world
+          ? "Die KI-Offiziere führen die Flanken. Tippe eine Kompanie an, um selbst zu befehlen."
+          : "Tippe auf eine eigene Kompanie (blaue Fahne), um sie zu befehligen.";
+
+    for (const c of b.companies) {
+      if (c.side !== PLAYER) continue;
+      let chip = this.chipEls.get(c.id);
+      if (!chip) {
+        chip = document.createElement("button");
+        chip.addEventListener("click", () => {
+          this.select(c.id);
+          if (this.selected === c.id && this.cam.zoom > this.cam.fitZoom() * 1.3) this.cam.centerOn(c.cx, c.cy);
+        });
+        $("#chips").appendChild(chip);
+        this.chipEls.set(c.id, chip);
+      }
+      chip.hidden = c.alive <= 0;
+      chip.classList.toggle("sel", c.id === this.selected);
+      const color = moraleColor(c);
+      const who = world ? (c.manual ? " ✋" : "") : "";
+      chip.innerHTML = `<span style="color:${color}">■</span> ${shortName(c)}${c.type === UNIT_MAGE ? " Magier" : ""}${who}<small>${c.alive} · ${orderText(c)}</small>`;
+    }
+  }
+
+  private describe(c: Company) {
+    const bar = (v: number, col: string) =>
+      `<span class="meter"><i style="width:${Math.max(0, v)}%;background:${col}"></i></span>`;
+    const second =
+      c.type === UNIT_MAGE
+        ? `Mana ${bar(c.mana, "#7ff0ff")} · Reichweite 230`
+        : `Moral ${bar(c.morale, moraleColor(c))} · ${orderText(c)}`;
+    const hint =
+      this.mode === "storm"
+        ? ""
+        : c.order === "rout"
+          ? " · <b>flieht, sammelt sich hinten</b>"
+          : c.manual
+            ? " · <b>von dir geführt</b>"
+            : this.ctx?.world
+              ? " · Offizier führt"
+              : " · Karte antippen = Position";
+    return `<b>${c.name}</b> · ${c.alive}/${c.initial} Mann${hint}<br>${second}`;
+  }
+}
+
+export function moraleColor(c: Company) {
+  if (c.type === UNIT_MAGE) return "#7ff0ff";
+  if (c.order === "rout") return "var(--bad)";
+  return c.morale > 60 ? "var(--ok)" : c.morale > 35 ? "var(--warn)" : "var(--bad)";
+}
+
+function orderText(c: Company) {
+  switch (c.order) {
+    case "storm":
+      return "stürmt";
+    case "retreat":
+      return "zieht sich zurück";
+    case "rout":
+      return "flieht!";
+    default: {
+      if (c.type === UNIT_MAGE) return c.mana < 20 ? "erschöpft" : "einsatzbereit";
+      const moving = Math.hypot(c.cx - c.tx, c.cy - c.ty) > 15;
+      if (moving) return "rückt vor";
+      return Math.abs(c.cy - TRENCH_Y[PLAYER]) < 40 ? "hält Graben" : "hält Stellung";
+    }
+  }
+}
+
+export function fmt(n: number) {
+  return n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`;
+}

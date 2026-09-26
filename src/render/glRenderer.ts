@@ -111,6 +111,11 @@ export class GlRenderer {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   }
 
+  /** Alle laufenden Effekte verwerfen (z. B. beim Wechsel der Schlacht). */
+  reset() {
+    this.fx = [];
+  }
+
   /** Neue Schüsse und Explosionen aus der Simulation übernehmen. */
   ingest(b: Battle) {
     const s = b.events.shots;

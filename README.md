@@ -1,21 +1,41 @@
 # Grabenfront
 
 Strategiespiel im Stil eines Anime-Grabenkriegs (inspiriert von Serien wie *Saga of Tanya the Evil*,
-eigenes Setting): riesige Schlachten mit Tausenden Soldaten wie in *Songs of Syx*, später eingebettet
-in eine rundenbasierte Weltkampagne. Läuft im Browser, auf dem Handy wie am PC.
+eigenes Setting): ein alternatives Europa um 1914, riesige Schlachten mit Tausenden Soldaten wie in
+*Songs of Syx* und eine Kampagne, in der man Stück für Stück Provinzen erobert. Läuft im Browser, auf
+dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
 
-## Stand: Schlacht-Prototyp (v0.1)
+## Stand (v0.2): Kampagnen-Prototyp
 
-- ~3.000 Soldaten gleichzeitig (Schützen, MG-Stellungen, fliegende Magier) in Echtzeit mit Pause
-- Grabenkrieg: Zickzack-Gräben, Stacheldraht, Granattrichter als Deckung, Moral und Flucht
-- **Allgemeine Befehle statt Mikromanagement:** Kompanie antippen, Karte antippen → sie rückt vor und
-  sucht selbst Deckung. Dazu *Halten*, *Sturm!* und *Rückzug*
-- **Artillerie:** Zielgebiet antippen, Einschlag nach 6 Sekunden. Trifft auch eigene Leute und hinterlässt
-  neue Trichter
-- **Magier:** fliegen übers Niemandsland, Flächenzauber, kämpfen gegen feindliche Magier, müssen zum
-  Aufladen zurück
-- Computergegner mit Vorbereitung (Artillerie → Bereitstellung → Sturm), Gegenangriffen und Reserven
-- Langsames Tempo: eine Schlacht dauert etwa 15 Minuten, mit 1×/2×/4× Geschwindigkeit
+**Kampagne**
+- Alternatives Europa 1914 aus echten Geodaten: 13 Nationen, 677 Provinzen. Kleine Länder sind
+  zusammengefasst, und die Grenzen von 1914 sind nachgebildet (Elsass-Lothringen, Galizien,
+  Kongresspolen …).
+- Die Welt läuft **in Echtzeit** (1 Minute = 1 Tag). Pause und 1×/2×/4×/8× sind möglich, bei wichtigen
+  Ereignissen **pausiert das Spiel automatisch**.
+- Zwei Bündnisse: Die **Julikrise** löst eine Kettenreaktion aus. Verbündete rufen um Hilfe, und du
+  entscheidest, ob du beitrittst.
+- **Frontpunkte** entlang jeder Kriegsgrenze, je nach Grenzlänge 1–4 Stück. Jeder Punkt mit Truppen auf
+  beiden Seiten ist eine **echte, laufende Schlacht**.
+- **Einnahme nach der 70/30-Regel**: Wer ≥ 70 % der Gesamtstärke stellt, schiebt den Balken vor.
+  Das dauert 15 bis 60 Minuten, je nach Übermacht. Ist der Balken voll, wechselt die Provinz den
+  Besitzer. Eingekesselte Gebiete ergeben sich.
+- **Truppen schicken**: Divisionen reisen über die Karte an Fronten, auch an die Fronten von
+  Verbündeten. Unbewachte Punkte fallen kampflos.
+- **KI-Offiziere pro Flanke** (Halten / Defensiv / Ausgewogen / Aggressiv). Sie führen jede Schlacht,
+  auch wenn du nicht hinschaust.
+- Einfache Wirtschaft (Gold, Nahrung, Material, Rekruten) und Ausbildung von Infanterie, MGs,
+  Artillerie und Magiern.
+- Diplomatie: Meinungen, Bündnisse, Krieg erklären, Frieden anbieten. Computer-Nationen handeln
+  selbstständig.
+
+**Schlacht** (für jeden Frontpunkt einzeln)
+- Tausende Soldaten, Gräben, Stacheldraht, Trichter, Moral, Artillerie mit Vorwarnzeit, fliegende Magier.
+- Die Offiziere führen die Schlacht, du kannst jederzeit einzelne Kompanien übernehmen (✋) und
+  wieder abgeben.
+- Nachschub marschiert vom hinteren Kartenrand ein. Verluste fließen zurück in die Divisionen der
+  Kampagne.
+- Im Menü gibt es außerdem **„Nur ein schnelles Gefecht“** zum Ausprobieren.
 
 ## Starten
 
@@ -35,45 +55,48 @@ selben WLAN** öffnen.
 npm start          # baut das Spiel und startet es auf Port 8080
 ```
 
-Dann auf dem Handy `http://<IP-deines-PCs>:8080` öffnen. Tipp: Im Handy-Browser „Zum Startbildschirm
-hinzufügen“, dann läuft es wie eine App im Vollbild.
+Dann auf dem Handy `http://<IP-deines-PCs>:8080` öffnen.
+
+> Noch gibt es **kein Speichern**. Das kommt mit Schritt 3 (Server und Speichern), siehe KONZEPT.md.
 
 ### Steuerung
 
-| Aktion             | Handy                      | PC                      |
-| ------------------ | -------------------------- | ----------------------- |
-| Kompanie wählen    | Fahne oder Liste antippen  | Klick                   |
-| Position zuweisen  | Karte antippen             | Klick                   |
-| Karte verschieben  | Ziehen                     | Ziehen                  |
-| Zoom               | Zwei Finger                | Mausrad                 |
-| Pause              | ⏸                          | Leertaste               |
-| Tempo              | 1× 2× 4×                   | Tasten 1 / 2 / 3        |
-| Halten/Sturm/Rückz. | Buttons                   | H / S / R               |
-| Artillerie         | Button, dann Ziel antippen | A, dann Klick           |
+| Aktion                | Handy                       | PC                   |
+| --------------------- | --------------------------- | -------------------- |
+| Karte verschieben     | Ziehen                      | Ziehen               |
+| Zoom                  | Zwei Finger                 | Mausrad              |
+| Pause / Tempo         | ⏸ 1× 2× 4× 8×               | Leertaste, 1–4       |
+| Frontpunkt öffnen     | Balken auf der Grenze       | Klick                |
+| Zurück zur Karte      | 🗺                          | Esc                  |
+| In der Schlacht       | Kompanie antippen, dann Ziel | H / S / R / O / A   |
 
 ## Aufbau des Codes
 
 ```
-src/sim/       Simulation, ohne Grafik (läuft auch auf dem Server / in Node)
-  config.ts    alle Balancing-Werte an einer Stelle
-  battle.ts    Soldaten, Kompanien, Kampf, Moral, Artillerie, Ziele
-  terrain.ts   Gräben, Draht, Trichter als Deckungs-/Bewegungsraster
-  grid.ts      räumliches Raster für schnelle Nachbarsuche
-  ai.ts        Computergegner
-src/render/    WebGL-Darstellung der Einheiten, Gelände-Canvas, Kamera
-src/ui/        Fahnen und Markierungen auf der Karte
-src/main.ts    Spielschleife, Eingabe, Menüs
-scripts/headless.ts  KI gegen KI ohne Grafik, für Balancing und Performance
+src/world/        Kampagne ohne Grafik (läuft auch in Node, später auf dem Server)
+  world.ts        Welt: Nationen, Divisionen, Kriege, Frontpunkte, Einnahme, Wirtschaft
+  fronts.ts       Frontpunkte entlang der Grenzen berechnen
+  frontBattle.ts  verbindet einen Frontpunkt mit einer echten Schlacht
+  worldAI.ts      Computer-Nationen
+  scenario.ts     Startaufstellung 1914, Bündnisse, Julikrise
+  config.ts       Balancing der Kampagne (70/30-Regel, Kosten, Tempo …)
+  mapData.ts      Kartenformat
+src/sim/          Schlacht-Simulation (Soldaten, Gelände, KI-Offiziere)
+src/campaign/     Kampagnenkarte (Darstellung und Menüs)
+src/render/       WebGL-Darstellung der Schlacht, Gelände, Kamera
+src/ui/           Schlachtansicht, Fahnen, Gesten
+src/main.ts       Menü, Spielschleife, Wechsel zwischen Karte und Schlacht
+scripts/
+  genmap.ts       erzeugt public/maps/europa.json aus Natural-Earth-Daten
+  mapdef.ts       Nationen 1914, Zuordnung der heutigen Länder, Grenzkorrekturen
+  headless.ts     eine Schlacht KI gegen KI ohne Grafik
+  worldsim.ts     die ganze Kampagne ohne Grafik (Balancing, Performance)
 ```
 
-Balancing testen: `npm run sim -- <seed> <minuten>` lässt eine ganze Schlacht in wenigen Sekunden
-durchlaufen und zeigt Verlauf, Sieger und Rechenzeit pro Tick.
+```bash
+npm run genmap              # Karte neu erzeugen (nach Änderungen an mapdef.ts)
+npm run worldsim -- 60      # 60 Minuten Kampagne ohne Grafik
+npm run sim -- 1 40         # eine Schlacht ohne Grafik
+```
 
-## Nächste Schritte
-
-1. **Kampagnenkarte:** rundenbasierte Weltkarte mit Provinzen, Armeen bewegen, Fronten
-2. **Einfache Wirtschaft:** Gold, Nahrung, Material, Rekruten pro Provinz; klare Upgrade-Stufen
-3. **Verbindung:** Aufeinandertreffen auf der Karte → Schlacht (selbst führen oder auto-berechnen),
-   Verluste und Gebietsgewinne fließen zurück
-4. **Speichern auf dem Home-Server**, damit man zwischen Handy und PC wechseln kann
-5. Mehr Einheiten: Scharfschützen, Flammenwerfer, Panzer-Prototypen, Magier-Asse mit Fähigkeiten
+Kartendaten: [Natural Earth](https://www.naturalearthdata.com/) (gemeinfrei), über das Paket `world-atlas`.

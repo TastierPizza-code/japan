@@ -116,6 +116,6 @@ export class Overlay {
 export function shortName(c: Company) {
   if (c.type === UNIT_MAGE) return "✦";
   if (c.type === UNIT_MG) return c.side === PLAYER ? c.name.replace("MG-Zug ", "MG ") : "MG";
-  const m = c.name.match(/^\d+/);
+  const m = c.name.match(/^\d+(\.\d+)?/);
   return m ? m[0] : c.name.slice(0, 3);
 }

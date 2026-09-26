@@ -7,6 +7,15 @@ export class Camera {
   zoom = 1;
   viewW = 1;
   viewH = 1;
+  worldW: number;
+  worldH: number;
+  maxZoom: number;
+
+  constructor(worldW = WORLD_W, worldH = WORLD_H, maxZoom = 8) {
+    this.worldW = worldW;
+    this.worldH = worldH;
+    this.maxZoom = maxZoom;
+  }
 
   resize(w: number, h: number) {
     this.viewW = w;
@@ -14,13 +23,13 @@ export class Camera {
   }
 
   fitZoom() {
-    return Math.min(this.viewW / WORLD_W, this.viewH / WORLD_H);
+    return Math.min(this.viewW / this.worldW, this.viewH / this.worldH);
   }
 
   fit() {
     this.zoom = this.fitZoom();
-    this.x = (WORLD_W - this.viewW / this.zoom) / 2;
-    this.y = (WORLD_H - this.viewH / this.zoom) / 2;
+    this.x = (this.worldW - this.viewW / this.zoom) / 2;
+    this.y = (this.worldH - this.viewH / this.zoom) / 2;
   }
 
   toWorld(sx: number, sy: number) {
@@ -41,7 +50,7 @@ export class Camera {
   zoomAt(sx: number, sy: number, factor: number) {
     const before = this.toWorld(sx, sy);
     const min = this.fitZoom() * 0.8;
-    this.zoom = Math.max(min, Math.min(8, this.zoom * factor));
+    this.zoom = Math.max(min, Math.min(this.maxZoom, this.zoom * factor));
     this.x = before.x - sx / this.zoom;
     this.y = before.y - sy / this.zoom;
     this.clamp();
@@ -56,9 +65,9 @@ export class Camera {
   private clamp() {
     const vw = this.viewW / this.zoom;
     const vh = this.viewH / this.zoom;
-    const mx = Math.max(0, (vw - WORLD_W) / 2) + vw * 0.3;
-    const my = Math.max(0, (vh - WORLD_H) / 2) + vh * 0.3;
-    this.x = Math.max(-mx, Math.min(WORLD_W - vw + mx, this.x));
-    this.y = Math.max(-my, Math.min(WORLD_H - vh + my, this.y));
+    const mx = Math.max(0, (vw - this.worldW) / 2) + vw * 0.3;
+    const my = Math.max(0, (vh - this.worldH) / 2) + vh * 0.3;
+    this.x = Math.max(-mx, Math.min(this.worldW - vw + mx, this.x));
+    this.y = Math.max(-my, Math.min(this.worldH - vh + my, this.y));
   }
 }

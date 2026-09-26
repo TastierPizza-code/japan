@@ -131,14 +131,19 @@ Die Schlachten sollen später richtig gut aussehen und sich glaubwürdig anfühl
 ## Reihenfolge
 
 1. ✅ Schlacht-Prototyp
-2. Kampagnen-Prototyp: Kartenausschnitt mit 4–5 Ländern, Kriegserklärung, Frontpunkte mit
-   Stärke-Balken, Truppen schicken, KI-Offiziere pro Flanke, Punkt antippen öffnet die Schlacht
+2. ✅ Kampagnen-Prototyp: alternatives Europa 1914 (13 Nationen, 677 Provinzen), Julikrise und
+   Bündnisse, Frontpunkte mit Stärke-Balken, Truppen schicken, KI-Offiziere pro Flanke, Punkt
+   antippen öffnet die laufende Schlacht, einfache Wirtschaft und Diplomatie
 3. Server/Client-Trennung und Speichern
 4. Wirtschaft und Upgrades
 5. Diplomatie und Bündnisse
 6. Ganze Welt, mehr Einheiten und Magier-Asse
 
 ## Offene Punkte
+
+- Weitere Regionen der Welt (Kolonien, Amerika, Asien): Der Kartengenerator ist dafür vorbereitet,
+  es fehlen nur weitere Regionen und Nationen in `scripts/mapdef.ts`.
+- Seekrieg / Landungen (Brythanien erreicht die Front bisher nur über Verbündete)
 
 - Namen und Aussehen der Länder (alternative Versionen der Großmächte von 1914)
 - Wie lange soll eine ganze Kampagne ungefähr dauern?

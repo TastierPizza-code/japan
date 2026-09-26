@@ -10,36 +10,63 @@
   </head>
   <body>
     <div id="app">
-      <div id="stage">
-        <canvas id="bg"></canvas>
-        <canvas id="gl"></canvas>
-        <svg id="overlay"></svg>
-        <div id="flags"></div>
+      <div id="views">
+        <!-- Kampagnenkarte -->
+        <div id="mapview" class="view">
+          <canvas id="mapcanvas"></canvas>
+          <svg id="mapsvg"></svg>
+          <div id="mapmarkers"></div>
+        </div>
+        <!-- Schlacht -->
+        <div id="stage" class="view" hidden>
+          <canvas id="bg"></canvas>
+          <canvas id="gl"></canvas>
+          <svg id="overlay"></svg>
+          <div id="flags"></div>
+        </div>
       </div>
 
       <header id="topbar">
         <div class="group">
+          <button id="back" class="icon" title="Zur Karte (Esc)" hidden>🗺</button>
           <button id="pause" class="icon" title="Pause (Leertaste)">⏸</button>
           <button class="speed" data-speed="1">1×</button>
           <button class="speed" data-speed="2">2×</button>
           <button class="speed" data-speed="4">4×</button>
+          <button class="speed" data-speed="8">8×</button>
         </div>
-        <div id="clock">00:00</div>
-        <div class="group" id="strength"></div>
+        <div id="clock"></div>
+        <div class="group" id="topinfo"></div>
       </header>
 
       <div id="modebar" hidden>
         <span id="modetext"></span>
         <button id="modecancel">Abbrechen</button>
       </div>
+      <div id="toasts"></div>
 
-      <footer id="panel">
+      <!-- Menü unten: Kampagne -->
+      <footer id="mapPanel" class="panel" hidden>
+        <nav id="tabs">
+          <button data-tab="info">Lage</button>
+          <button data-tab="army">Armee</button>
+          <button data-tab="recruit">Ausbilden</button>
+          <button data-tab="diplo">Diplomatie</button>
+          <button data-tab="log">Meldungen</button>
+        </nav>
+        <div id="tabbody"></div>
+      </footer>
+
+      <!-- Menü unten: Schlacht -->
+      <footer id="panel" class="panel" hidden>
         <div id="selinfo"></div>
         <div class="row" id="orders">
           <button data-order="hold" title="H">Halten</button>
           <button data-order="storm" class="danger" title="S">Sturm!</button>
           <button data-order="retreat" title="R">Rückzug</button>
+          <button data-order="officer" id="officerBtn" title="O">Offizier</button>
         </div>
+        <div class="row" id="flankRow"></div>
         <div class="row" id="support">
           <button id="arty" title="A">Artillerie</button>
           <button id="reserve">Reserve</button>
@@ -48,7 +75,7 @@
         <div id="chips"></div>
       </footer>
 
-      <div id="dialog" class="dialog"></div>
+      <div id="dialog" class="dialog" hidden></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
