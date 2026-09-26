@@ -5,7 +5,7 @@ eigenes Setting): ein alternatives Europa um 1914, riesige Schlachten mit Tausen
 *Songs of Syx* und eine Kampagne, in der man Stück für Stück Provinzen erobert. Läuft im Browser, auf
 dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
 
-## Stand (v0.2): Kampagnen-Prototyp
+## Stand (v0.4): Kampagne und taktische Schlachten
 
 **Kampagne**
 - Alternatives Europa 1914 aus echten Geodaten: 13 Nationen, 677 Provinzen. Kleine Länder sind
@@ -29,7 +29,7 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
 - Diplomatie: Meinungen, Bündnisse, Krieg erklären, Frieden anbieten. Computer-Nationen handeln
   selbstständig.
 
-**Schlacht** (für jeden Frontpunkt einzeln, v0.3)
+**Schlacht** (für jeden Frontpunkt einzeln, v0.4)
 - 5 Landschaften: Flandern (Schlamm, Wassertrichter), Champagne (Kreide), Argonnen (Wald),
   Karpaten (Schnee), Dorfkampf (Ruinen im Niemandsland). Jede Karte ist zufällig erzeugt, mit
   geschwungenen Grabensystemen, Sappen, Bunkern, Stacheldraht, Hohlwegen, Bächen, Ruinen, Wracks
@@ -70,6 +70,9 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
 - **Meldungen** der Offiziere, zum Beispiel „Feind stürmt links!“, „Gas Mitte!“ oder „Einbruch
   rechts gesichert“. Antippen bringt die Kamera hin.
 - **Ton**: Trillerpfeifen, wenn ein Sturm losbricht, und Gasalarm.
+- **Übersicht**: Der eigene Angriffsplan erscheint als blauer Pfeil, stürmende Feinde als rote
+  Pfeile. Die Taktik-Hilfe (?) steht in der oberen Leiste. Nach dem Gefecht zeigt eine Auswertung,
+  welche Waffe wie viele Gegner ausgeschaltet hat.
 - Nachschub marschiert vom hinteren Kartenrand ein. Verluste fließen zurück in die Divisionen der
   Kampagne.
 - Im Menü gibt es außerdem **„Nur ein schnelles Gefecht“** zum Ausprobieren.
