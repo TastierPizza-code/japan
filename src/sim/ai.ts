@@ -45,6 +45,12 @@ export class BattleAI {
   private attackWait: number;
   private attack: Attack | null = null;
   private side: number;
+  /** So viele Batterien bleiben für den Spieler frei (solange er zuschaut) */
+  keepBatteries = 0;
+  /** Meldungen an den Spieler (Angriffe, Einbrüche, feindliche Stürme, Gas …) */
+  reports: { text: string; kind: "good" | "bad" | "info"; x: number; y: number }[] = [];
+  private lastWarn = new Map<string, number>();
+  private owners: number[] = [];
   /** Protokoll für Tests (Angriffe, Ergebnisse) */
   onLog: ((msg: string) => void) | null = null;
   private attackStart = 0;
@@ -82,12 +88,50 @@ export class BattleAI {
     this.history.push({ t: b.time, s: LANES.map((x) => strengthNear(foe, x, 300, (c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN)) });
     while (this.history.length > 0 && b.time - this.history[0].t > 150) this.history.shift();
 
+    this.watch(b, foe);
     this.reserves(b);
     this.defend(b, own);
     this.antiTank(b, own, foe);
     this.offense(b, own, foe);
     this.artillery(b, own, foe);
     this.mages(b, own, foe);
+  }
+
+  private report(text: string, kind: "good" | "bad" | "info", x: number, y: number) {
+    this.reports.push({ text, kind, x, y });
+    if (this.reports.length > 12) this.reports.shift();
+  }
+
+  /** Warnung höchstens alle paar Minuten je Anlass */
+  private warn(key: string, now: number, every: number) {
+    if ((this.lastWarn.get(key) ?? -Infinity) + every > now) return false;
+    this.lastWarn.set(key, now);
+    return true;
+  }
+
+  /** Was der Stab beobachtet und meldet: feindliche Stürme, Gas, Stellungen */
+  private watch(b: Battle, foe: Company[]) {
+    const fwd = FORWARD[this.side];
+    for (let l = 0; l < LANES.length; l++) {
+      const storming = foe.filter(
+        (c) => c.order === "storm" && Math.abs(c.cx - LANES[l]) < 300 && (c.cy - this.front(b, c.cx)) * fwd > -500,
+      );
+      const men = storming.reduce((n, c) => n + c.alive, 0);
+      if (men >= 40 && this.warn(`sturm${l}`, b.time, 120)) this.report(`Feind stürmt ${LANE_NAMES[l]}! (${men} Mann)`, "bad", LANES[l], this.front(b, LANES[l]));
+    }
+    for (const sm of b.smokes) {
+      if (!sm.gas || b.time - sm.t0 > 3.5) continue;
+      const hit = b.companies.some((c) => c.side === this.side && c.alive > 0 && Math.hypot(c.cx - sm.x, c.cy - sm.y) < 120);
+      if (hit && this.warn(`gas${laneOf(sm.x)}`, b.time, 60)) this.report(`Gas ${LANE_NAMES[laneOf(sm.x)]}! Masken auf`, "bad", sm.x, sm.y);
+    }
+    b.objectives.forEach((o, k) => {
+      const prev = this.owners[k];
+      if (prev !== undefined && prev !== o.owner) {
+        if (o.owner === this.side) this.report(`Feindliche Stellung ${LANE_NAMES[laneOf(o.x)]} genommen!`, "good", o.x, o.y);
+        else this.report(`Stellung ${LANE_NAMES[laneOf(o.x)]} verloren!`, "bad", o.x, o.y);
+      }
+      this.owners[k] = o.owner;
+    });
   }
 
   private reserves(b: Battle) {
@@ -207,7 +251,7 @@ export class BattleAI {
         this.attackWait = 30;
         return;
       }
-      if (!this.startAttack(own, LANES[best], false)) {
+      if (!this.startAttack(b, own, LANES[best], false)) {
         this.attackWait = 30;
         return;
       }
@@ -238,6 +282,7 @@ export class BattleAI {
       const limit = a.stage === "storm" ? 0.5 : 0.7;
       if (left < this.attackStart * limit && !units.some((c) => c.type !== UNIT_TANK && inTrench(c))) {
         this.onLog?.(`Abbruch (Phase ${a.stage})`);
+        this.report(`Angriff ${LANE_NAMES[laneOf(a.lane)]} abgebrochen – zu hohe Verluste`, "bad", a.breach, (enemyFront(a.breach) + this.front(b, a.breach)) / 2);
         for (const c of units) if (c.type !== UNIT_TANK) b.orderRetreat(c.id);
         this.endAttack(b);
         return;
@@ -323,6 +368,7 @@ export class BattleAI {
         });
         a.stage = "storm";
         a.timer = 0;
+        this.report(`Sturm ${LANE_NAMES[laneOf(a.breach)]}!`, "info", a.breach, enemyFront(a.breach));
       }
     } else if (a.stage === "storm") {
       // Feuerwalze: solange die eigenen Leute noch weit genug weg sind, weiter auf den Graben schießen
@@ -343,6 +389,7 @@ export class BattleAI {
         if (w.alive > 0 && w.order === "advance" && !w.manual) {
           b.orderStorm(w.id, a.breach, enemyFront(a.breach));
           this.onLog?.(`Zweite Welle stürmt: ${w.name}`);
+          this.report(`Einbruch ${LANE_NAMES[laneOf(a.breach)]}! Zweite Welle stürmt nach`, "good", a.breach, enemyFront(a.breach));
         }
       }
       if (this.veteran && brokeIn && !a.mgsForward) {
@@ -392,6 +439,7 @@ export class BattleAI {
       mg.homeX = a.breach;
       mg.homeY = y;
       this.onLog?.(`Einbruch gesichert, MG nachgezogen`);
+      this.report(`Einbruch ${LANE_NAMES[laneOf(a.breach)]} gesichert, MG nachgezogen`, "good", a.breach, b.terrain.frontY(1 - this.side, a.breach));
     }
   }
 
@@ -423,7 +471,7 @@ export class BattleAI {
   }
 
   /** Angriff zusammenstellen: Schützen aus dem Abschnitt, dazu Panzer, Flammenwerfer und Stoßtrupps */
-  private startAttack(own: Company[], lane: number, planned: boolean): boolean {
+  private startAttack(b: Battle, own: Company[], lane: number, planned: boolean): boolean {
     const reach = this.veteran ? 480 : 300;
     const candidates = own
       .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 60 && Math.abs(c.cx - lane) < reach)
@@ -446,6 +494,7 @@ export class BattleAI {
     this.attack = { lane, breach: lane, stage: "prep", timer: 0, units: [...infantry, ...support].map((c) => c.id), planned };
     this.attackStart = [...infantry, ...support].reduce((n, c) => n + c.alive, 0);
     this.onLog?.(`Angriff bei x=${Math.round(lane)} mit ${this.attackStart} Mann${planned ? " (befohlen)" : ""}`);
+    this.report(`Angriff ${LANE_NAMES[laneOf(lane)]} mit ${this.attackStart} Mann – Vorbereitung läuft`, "info", lane, this.front(b, lane));
     return true;
   }
 
@@ -457,7 +506,7 @@ export class BattleAI {
     if (this.attack || b.result) return false;
     const lane = Math.max(150, Math.min(WORLD_W - 150, x));
     const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual);
-    return this.startAttack(own, lane, true);
+    return this.startAttack(b, own, lane, true);
   }
 
   /** Kurzbeschreibung des laufenden Angriffs für die Anzeige */
@@ -511,7 +560,7 @@ export class BattleAI {
   }
 
   private artillery(b: Battle, own: Company[], foe: Company[]) {
-    if (this.artyWait > 0 || b.sides[this.side].artyCharges === 0) return;
+    if (this.artyWait > 0 || b.sides[this.side].artyCharges <= this.keepBatteries) return;
     // Erfahrene sparen sich die Batterien für Nebel und Feuerwalze ihres Angriffs auf
     if (this.veteran && this.attack && this.attack.stage !== "storm" && b.sides[this.side].artyCharges < 3) return;
     let best: Company | null = null;

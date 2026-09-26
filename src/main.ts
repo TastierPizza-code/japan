@@ -46,6 +46,12 @@ class App {
     // Browser erlauben Ton erst nach einer Berührung/einem Klick
     window.addEventListener("pointerdown", () => this.battleView.audio.unlock(), { capture: true });
     $("#toasts").addEventListener("click", (e) => {
+      // Meldung aus der Schlacht: Kamera dorthin
+      const bx = (e.target as HTMLElement).closest<HTMLElement>("[data-bx]");
+      if (bx && this.view === "battle") {
+        this.battleView.focus(Number(bx.dataset.bx), Number(bx.dataset.by));
+        return;
+      }
       const t = (e.target as HTMLElement).closest<HTMLElement>("[data-point]");
       if (t && this.campaign) {
         this.backToMap();
@@ -94,6 +100,11 @@ class App {
       b.addEventListener("click", () => this.startCampaign(Number(b.dataset.nation))),
     );
     $("#skirmish").addEventListener("click", () => this.skirmishMenu());
+    this.battleView.onReport = (text, kind, x, y) => {
+      const el = this.toast(text, kind === "info" ? "info" : kind === "good" ? "good" : "bad");
+      el.dataset.bx = String(Math.round(x));
+      el.dataset.by = String(Math.round(y));
+    };
   }
 
   skirmishMenu() {
@@ -285,7 +296,7 @@ class App {
     }
   }
 
-  private toast(text: string, kind: string, point?: number) {
+  private toast(text: string, kind: string, point?: number): HTMLElement {
     const el = document.createElement("div");
     el.className = `toast ${kind}`;
     el.textContent = text;
@@ -295,6 +306,7 @@ class App {
     while (box.children.length > 4) box.lastElementChild!.remove();
     setTimeout(() => el.classList.add("out"), 5000);
     setTimeout(() => el.remove(), 5600);
+    return el;
   }
 
   private showDecision() {

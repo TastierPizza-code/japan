@@ -83,6 +83,10 @@ export class BattleView {
 
   open(ctx: BattleContext) {
     this.ctx = ctx;
+    // Alte Meldungen (aus der Zeit, in der niemand hinsah) nicht nachträglich zeigen
+    if (ctx.officer) ctx.officer.reports.length = 0;
+    // Solange du zuschaust, halten die Offiziere eine Batterie für dich frei
+    if (ctx.officer && !ctx.spectator) ctx.officer.keepBatteries = 1;
     this.painter = new TerrainPainter(ctx.battle.terrain, this.gl.atlas);
     this.painter.replay(ctx.battle.corpses, ctx.battle.scars);
     this.blood = new BloodLayer();
@@ -109,6 +113,7 @@ export class BattleView {
   }
 
   close() {
+    if (this.ctx?.officer) this.ctx.officer.keepBatteries = 0;
     this.ctx = null;
     this.painter = null;
     this.stage.hidden = true;
@@ -116,9 +121,23 @@ export class BattleView {
     $("#modebar").hidden = true;
   }
 
+  /** Meldungen der eigenen Offiziere (main zeigt sie als Toast) */
+  onReport: ((text: string, kind: string, x: number, y: number) => void) | null = null;
+
+  /** Kamera auf eine gemeldete Stelle richten */
+  focus(x: number, y: number) {
+    if (!this.ctx) return;
+    this.cam.zoom = Math.max(this.cam.zoom, 0.8);
+    this.cam.centerOn(x, y);
+  }
+
   /** Einmal pro Bild: Ereignisse übernehmen und zeichnen. */
   frame(simDt: number) {
     if (!this.ctx || !this.painter) return;
+    const off = this.ctx.officer;
+    if (off && off.reports.length > 0) {
+      for (const r of off.reports.splice(0)) if (!this.ctx.spectator) this.onReport?.(r.text, r.kind, r.x, r.y);
+    }
     const b = this.battle;
     const e = b.events;
     const painter = this.painter;
