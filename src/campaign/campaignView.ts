@@ -390,7 +390,10 @@ export class CampaignView {
     const theirProv = w.map.provinces[side === 0 ? p.provB : p.provA];
     const st = this.pointState(p);
     const bar = side === 0 ? p.bar : -p.bar;
-    const mine = w.divisionsAt(p.id, side);
+    // Auf deiner Seite der Front stehen auch Verbündete – abziehen kannst du nur deine eigenen
+    const here = w.divisionsAt(p.id, side);
+    const mine = here.filter((d) => d.nation === w.player);
+    const allies = here.filter((d) => d.nation !== w.player);
     const coming = w.incomingTo(p.id, side);
     const principal = (side === 0 ? p.a : p.b) === w.player;
     let html = `<h3>Front gegen ${nationTag(w, enemy)}</h3>
@@ -414,11 +417,16 @@ export class CampaignView {
     html += `<h4>Eigene Truppen hier (${mine.length})</h4><div class="list">`;
     for (const d of mine) html += this.divRow(d, `<button class="mini" data-act="withdraw" data-id="${d.id}">Abziehen</button>`);
     html += `</div>`;
+    if (allies.length) {
+      html += `<h4>Verbündete hier (${allies.length})</h4><div class="list">`;
+      for (const d of allies) html += this.divRow(d, `<small>${nationTag(w, d.nation)}</small>`);
+      html += `</div>`;
+    }
     if (coming.length) {
       html += `<h4>Unterwegs (${coming.length})</h4><div class="list">`;
       for (const d of coming) {
         const left = d.loc.t === "move" ? d.loc.dur - d.loc.elapsed : 0;
-        html += this.divRow(d, `<small>${days(left)}</small>`);
+        html += this.divRow(d, `<small>${d.nation === w.player ? "" : `${nationTag(w, d.nation)} · `}${days(left)}</small>`);
       }
       html += `</div>`;
     }
@@ -572,7 +580,8 @@ export class CampaignView {
         break;
       }
       case "withdraw":
-        w.withdraw(id);
+        // Nur eigene Divisionen
+        if (w.divisions.get(id)?.nation === w.player) w.withdraw(id);
         break;
       case "sendto":
         this.sendDialog(id);
