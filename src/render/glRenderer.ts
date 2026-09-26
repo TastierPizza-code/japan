@@ -145,6 +145,8 @@ export class GlRenderer {
   private tracers: Tracer[] = [];
   private time = 0;
   private whistled = new WeakSet<object>();
+  /** Gaswolken dieses Bildes (für die Maskenfärbung) */
+  private gasNow: { x: number; y: number; r: number }[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -424,6 +426,7 @@ export class GlRenderer {
     }
 
     // --- Einheiten
+    this.gasNow = b.smokes.filter((sm) => sm.gas && b.time - sm.t0 > 2);
     const style = this.style;
     const scale = style === "deutlich" ? 1.35 : 1;
     const pass = (types: (t: number) => boolean) => {
@@ -599,6 +602,11 @@ export class GlRenderer {
       if (c.order === "rout") bright *= 0.75 + 0.25 * Math.sin(this.time * 9 + i);
     }
     if (type !== UNIT_TANK && type !== UNIT_GUN && type !== UNIT_MAGE && b.suppress[i] > 0.6) bright *= 0.85;
+    // In der Gaswolke: Masken auf, fahl-grünlich
+    if (type !== UNIT_TANK && type !== UNIT_MAGE && this.gasNow.some((g) => (g.x - x) ** 2 + (g.y - y) ** 2 < g.r * g.r)) {
+      this.sprite(frames[frame], x, y, ang, s, bright * 0.78, bright * 0.92, bright * 0.62, 1);
+      return;
+    }
     this.sprite(frames[frame], x, y, ang, s, bright, bright, bright, 1);
   }
 
