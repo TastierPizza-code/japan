@@ -59,6 +59,24 @@ export class Overlay {
       );
     }
 
+    // Stürmende feindliche Kompanien: roter Pfeil in Laufrichtung
+    for (const c of b.companies) {
+      if (c.side === PLAYER || c.alive < 10 || c.order !== "storm") continue;
+      const a = cam.toScreen(c.cx, c.cy);
+      const t = cam.toScreen(c.tx, c.ty);
+      const len = Math.hypot(t.x - a.x, t.y - a.y);
+      if (len < 20) continue;
+      const k = Math.min(1, 70 / len);
+      const ex = a.x + (t.x - a.x) * k;
+      const ey = a.y + (t.y - a.y) * k;
+      const ang = Math.atan2(t.y - a.y, t.x - a.x);
+      const wing = (d: number) => `${ex + Math.cos(ang + d) * 10},${ey + Math.sin(ang + d) * 10}`;
+      parts.push(
+        `<path d="M${a.x} ${a.y}L${ex} ${ey}" stroke="${EC}" stroke-width="3" opacity=".8"/>`,
+        `<path d="M${ex + Math.cos(ang) * 6} ${ey + Math.sin(ang) * 6}L${wing(2.5)}L${wing(-2.5)}Z" fill="${EC}" opacity=".9"/>`,
+      );
+    }
+
     for (const br of b.barrages) {
       const p = cam.toScreen(br.x, br.y);
       const col = br.side === PLAYER ? PC : EC;
