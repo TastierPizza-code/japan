@@ -439,7 +439,8 @@ export class Battle {
   orderRetreat(companyId: number) {
     const c = this.companies[companyId];
     if (!c || c.alive === 0 || c.order === "rout" || c.type === UNIT_GUN) return;
-    this.setTarget(c, c.homeX, c.homeY, "retreat");
+    // Panzer fahren zurück und bleiben kampfbereit (für sie gibt es keinen Sammelpunkt)
+    this.setTarget(c, c.homeX, c.homeY, c.type === UNIT_TANK ? "advance" : "retreat");
   }
 
   /** Feuerschlag: eine bereite Batterie beschießt das Zielgebiet. */

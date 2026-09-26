@@ -288,7 +288,7 @@ export class BattleAI {
       if (left < this.attackStart * limit && !units.some((c) => c.type !== UNIT_TANK && inTrench(c))) {
         this.onLog?.(`Abbruch (Phase ${a.stage})`);
         this.report(`Angriff ${LANE_NAMES[laneOf(a.lane)]} abgebrochen – zu hohe Verluste`, "bad", a.breach, (enemyFront(a.breach) + this.front(b, a.breach)) / 2);
-        for (const c of units) if (c.type !== UNIT_TANK) b.orderRetreat(c.id);
+        for (const c of units) b.orderRetreat(c.id);
         this.endAttack(b);
         return;
       }
@@ -666,7 +666,7 @@ export class BattleAI {
     if (!this.attack) return;
     for (const id of this.attack.units) {
       const c = b.companies[id];
-      if (c.alive > 0 && !c.manual && c.type !== UNIT_TANK) b.orderRetreat(id);
+      if (c.alive > 0 && !c.manual) b.orderRetreat(id);
     }
     this.endAttack(b);
   }
