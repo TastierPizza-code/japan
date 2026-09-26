@@ -99,6 +99,11 @@ export class BattleAI {
     this.mages(b, own, foe);
   }
 
+  /** Meldung von außen (etwa: Verstärkung trifft ein) */
+  notify(text: string, kind: "good" | "bad" | "info", x: number, y: number) {
+    this.report(text, kind, x, y);
+  }
+
   private report(text: string, kind: "good" | "bad" | "info", x: number, y: number) {
     this.reports.push({ text, kind, x, y });
     if (this.reports.length > 12) this.reports.shift();

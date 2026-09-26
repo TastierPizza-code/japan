@@ -144,10 +144,12 @@ export class FrontBattle {
         let spare = d.soldiers - (onField.get(d.id) ?? 0);
         let k = b.companies.filter((c) => c.division === d.id).length;
         const num = divisionNumber(d);
+        let arrived = 0;
         const spawn = (type: number, name: string, x: number, y: number, size: number) => {
           const c = b.spawnCompany(bs, type, name, x, y, size, d.id, initial || type === UNIT_GUN);
           this.lastAlive.set(c.id, c.alive);
           spare -= size;
+          arrived += size;
           bump(type);
         };
         if (d.kind === "infantry") {
@@ -195,6 +197,8 @@ export class FrontBattle {
         } else if (d.kind === "mage") {
           if (spare >= 1) spawn(UNIT_MAGE, `✦ ${num}`, WORLD_W / 2, REAR_Y[bs], spare);
         }
+        // Meldung: Verstärkung erscheint am hinteren Rand und rückt ein
+        if (!initial && arrived > 0) this.ai[bs].notify(`Verstärkung: ${d.name} (${arrived}) rückt von hinten an`, "good", WORLD_W / 2, REAR_Y[bs]);
       }
     }
   }

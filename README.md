@@ -50,7 +50,8 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
     alle feindlichen Stellungen oder den **vollen Rückzug** (Q) und steuerst die Artillerie.
 - **Kampagne**: Wer in einer Schlacht alle Stellungen nimmt oder den Gegner zerschlägt, nimmt die
   Provinz sofort. Truppen, die dort stehen oder unterwegs sind, gehen an die neue Front. Die
-  überlegene Seite bringt mehr Kompanien aufs Feld, bis zu 18 statt 8.
+  überlegene Seite bringt mehr Kompanien aufs Feld, bis zu 18 statt 8. Trifft Verstärkung ein,
+  meldet der Offizier das. Sie rückt vom hinteren Kartenrand ein.
 - **Artillerie** reicht nur bis knapp hinter den feindlichen vorderen Graben. Im Graben hält sie
   vor allem nieder, tödlich ist sie für Truppen im Freien.
 - **Überlegenheit gewinnt**: Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer
