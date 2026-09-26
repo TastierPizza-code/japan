@@ -65,6 +65,10 @@ export class BattleView {
     $("#smokeBtn").addEventListener("click", () => this.setMode(this.mode === "smoke" ? "none" : "smoke"));
     $("#planBtn").addEventListener("click", () => this.planButton());
     $("#generalBtn").addEventListener("click", () => this.generalButton());
+    $("#retreatAllBtn").addEventListener("click", () => {
+      if (this.ctx?.officer && !this.ctx.spectator) this.ctx.officer.fullRetreat(this.battle);
+      this.hud();
+    });
     $("#gasBtn").addEventListener("click", () => this.setMode(this.mode === "gas" ? "none" : "gas"));
     $("#modecancel").addEventListener("click", () => this.setMode("none"));
     $("#reserve").addEventListener("click", () => {
@@ -354,6 +358,9 @@ export class BattleView {
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
     else if (k === "n") this.setMode(this.mode === "smoke" ? "none" : "smoke");
     else if (k === "g") this.generalButton();
+    else if (k === "q") {
+      if (this.ctx.officer && !this.ctx.spectator) this.ctx.officer.fullRetreat(this.battle);
+    }
     else if (k === "p") this.planButton();
     else if (k === "k") this.setMode(this.mode === "gas" ? "none" : "gas");
     else if (k === "v") this.cycleStyle();
@@ -458,6 +465,10 @@ export class BattleView {
     const gen = $<HTMLButtonElement>("#generalBtn");
     const genLeft = this.ctx.officer ? this.ctx.officer.generalUntil - b.time : 0;
     gen.hidden = !this.ctx.officer;
+    const ret = $<HTMLButtonElement>("#retreatAllBtn");
+    ret.hidden = !this.ctx.officer;
+    const retLeft = this.ctx.officer ? this.ctx.officer.retreatUntil - b.time : 0;
+    ret.textContent = retLeft > 0 ? `Rückzug · ${Math.ceil(retLeft)}s` : "Rückzug";
     gen.disabled = genLeft > 0;
     gen.textContent = genLeft > 0 ? `General\u00ADangriff · ${Math.ceil(genLeft)}s` : "General\u00ADangriff";
     const plan = $<HTMLButtonElement>("#planBtn");

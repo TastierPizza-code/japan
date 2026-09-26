@@ -532,6 +532,12 @@ export class World {
     }
   }
 
+  /** Die Schlacht an einem Frontpunkt ist entschieden: der Sieger nimmt die Provinz sofort. */
+  battleDecided(p: FrontPoint, winnerSide: number) {
+    if (!this.points.includes(p)) return;
+    this.capture(p, winnerSide);
+  }
+
   private capture(p: FrontPoint, winnerSide: number) {
     const winner = winnerSide === 0 ? p.a : p.b;
     const loser = winnerSide === 0 ? p.b : p.a;

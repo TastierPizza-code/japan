@@ -66,6 +66,13 @@ export class FrontBattle {
     this.ai[1].update(this.battle, dt);
     this.battle.update(dt);
     if (!viewed) this.battle.clearEvents();
+    // Entschieden (alle Stellungen genommen oder Gegner zerschlagen): die Provinz fällt sofort,
+    // die Front rückt vor, und alle Truppen hier und unterwegs werden zur neuen Front umgeleitet
+    if (this.battle.result) {
+      this.syncLosses(world, p);
+      world.battleDecided(p, this.sideMap[this.battle.result.winner]);
+      return;
+    }
     this.syncTimer -= dt;
     if (this.syncTimer <= 0) {
       this.syncTimer = 0.25;
@@ -120,6 +127,9 @@ export class FrontBattle {
       const onField = new Map<number, number>();
       let rifles = 0;
       const count: Record<number, number> = {};
+      // Wer an diesem Punkt deutlich stärker ist, bringt entsprechend mehr Kompanien aufs Feld
+      const ratio = (point.strength[this.sideMap[bs]] + 1) / (point.strength[this.sideMap[1 - bs]] + 1);
+      const maxRifles = Math.max(FIELD_RIFLE_COMPANIES, Math.min(18, Math.round(FIELD_RIFLE_COMPANIES * Math.sqrt(ratio))));
       for (const c of b.companies) {
         if (c.side !== bs || c.alive <= 0) continue;
         onField.set(c.division, (onField.get(c.division) ?? 0) + c.alive);
@@ -141,7 +151,7 @@ export class FrontBattle {
           bump(type);
         };
         if (d.kind === "infantry") {
-          while (spare >= 30 && rifles < FIELD_RIFLE_COMPANIES) {
+          while (spare >= 30 && rifles < maxRifles) {
             // Dort hin, wo die Front am dünnsten besetzt ist – nicht alle auf dieselben drei Punkte
             const { x, y } = b.freeSlot(bs, true);
             spawn(UNIT_RIFLE, `${num}.${++k}`, x, y, Math.min(COMPANY_SIZE, spare));

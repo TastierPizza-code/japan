@@ -1533,7 +1533,9 @@ export class Battle {
    * sonst marschiert sie vom hinteren Rand dorthin.
    */
   spawnCompany(side: number, type: number, name: string, x: number, y: number, size: number, division: number, teleport: boolean) {
-    const startY = teleport || type === UNIT_GUN ? y : REAR_Y[side];
+    // Verstärkung taucht kurz hinter ihrem Platz auf (nicht erst am Kartenrand) und rückt ein
+    const behind = y - FORWARD[side] * 200;
+    const startY = teleport || type === UNIT_GUN ? y : side === 0 ? Math.min(REAR_Y[0], behind) : Math.max(REAR_Y[1], behind);
     const c = this.createCompany(side, type, name, x, startY, size);
     c.division = division;
     c.homeX = x;

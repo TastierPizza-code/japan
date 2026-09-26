@@ -347,6 +347,8 @@ class App {
         <li><b>Überlegenheit gewinnt.</b> Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer unterlegen im Graben sitzt, bricht.</li>
         <li><b>Generalangriff</b> (G): alle Flanken stürmen gleichzeitig. Das ist der Todesstoß, wenn du klar überlegen bist.
         Bei Gleichstand ist er ein Glücksspiel.</li>
+        <li><b>Rückzug</b> (Q): bricht Angriffe und Generalangriff ab und holt alle in die eigene Stellung zurück,
+        auch aus eroberten feindlichen Gräben. Zwei Minuten lang greifen deine Offiziere dann nicht von sich aus an.</li>
         <li><b>Angriff planen</b> (P): Abschnitt antippen. Der Offizier zerschießt den Draht und vergast die Reserven.
         Panzer rollen voraus, Nebel fällt, Stoßtrupps stürmen, die zweite Welle folgt.</li>
         <li>Am besten <b>kontern</b>: dort angreifen, wo der Feind gerade bei einem Sturm geblutet hat.</li>

@@ -46,8 +46,11 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
 - **Du führst die Magier**, alles andere führen deine Offiziere.
   - Magier-Befehle: Luftschutz, Begleiten, Jagd, oder du führst sie direkt.
   - Fähigkeiten: **Sprengzauber** (Z) und **Schutzkuppel** (X).
-  - Den Offizieren gibst du Haltungen je Flanke, befiehlst Angriffe oder den **Generalangriff** (G)
-    und steuerst die Artillerie.
+  - Den Offizieren gibst du Haltungen je Flanke, befiehlst Angriffe, den **Generalangriff** (G) auf
+    alle feindlichen Stellungen oder den **vollen Rückzug** (Q) und steuerst die Artillerie.
+- **Kampagne**: Wer in einer Schlacht alle Stellungen nimmt oder den Gegner zerschlägt, nimmt die
+  Provinz sofort. Truppen, die dort stehen oder unterwegs sind, gehen an die neue Front. Die
+  überlegene Seite bringt mehr Kompanien aufs Feld, bis zu 18 statt 8.
 - **Artillerie** reicht nur bis knapp hinter den feindlichen vorderen Graben. Im Graben hält sie
   vor allem nieder, tödlich ist sie für Truppen im Freien.
 - **Überlegenheit gewinnt**: Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer

@@ -279,7 +279,7 @@ export class BattleAI {
   private offense(b: Battle, own: Company[], foe: Company[]) {
     const fwd = FORWARD[this.side];
     const enemySide = 1 - this.side;
-    if (this.generalUntil > b.time) return;
+    if (this.generalUntil > b.time || this.retreatUntil > b.time) return;
     if (!this.attack) {
       const aggr = this.maxAggression();
       if (this.attackWait > 0 || aggr === 0) return;
@@ -684,11 +684,24 @@ export class BattleAI {
     const enemy = 1 - this.side;
     const fwd = FORWARD[this.side];
     if (this.attack) this.endAttack(b);
+    this.retreatUntil = -1;
+    // Ziele: alle Stellungen, die noch dem Feind gehören – jede bekommt ihren Anteil der Stürmer,
+    // damit keine (etwa die Mitte mit nur einem MG-Trupp) ausgelassen wird
+    const goals = b.objectives.filter((o) => o.owner === enemy).map((o) => ({ x: o.x, men: 0 }));
+    if (goals.length === 0) goals.push(...LANES.map((x) => ({ x, men: 0 })));
+    const units = b.companies
+      .filter((c) => c.side === this.side && c.alive > 0 && !c.manual && c.order !== "rout")
+      .filter((c) => c.type === UNIT_RIFLE || c.type === UNIT_STORM || c.type === UNIT_FLAME || c.type === UNIT_TANK)
+      .sort((p, q) => q.alive - p.alive);
+    const total = units.reduce((n, c) => n + (c.type === UNIT_TANK ? 60 : c.alive), 0);
     let n = 0;
-    for (const c of b.companies) {
-      if (c.side !== this.side || c.alive <= 0 || c.manual || c.order === "rout") continue;
-      if (c.type !== UNIT_RIFLE && c.type !== UNIT_STORM && c.type !== UNIT_FLAME && c.type !== UNIT_TANK) continue;
-      const x = Math.max(60, Math.min(WORLD_W - 60, c.cx));
+    for (const c of units) {
+      // nächstgelegene Stellung, die noch unter ihrem Anteil liegt
+      const g = goals
+        .map((g) => ({ g, cost: Math.abs(g.x - c.cx) + (g.men >= total / goals.length ? 5000 : 0) }))
+        .sort((p, q) => p.cost - q.cost)[0].g;
+      const x = Math.max(60, Math.min(WORLD_W - 60, g.x + (b.rng.next() - 0.5) * 200));
+      g.men += c.type === UNIT_TANK ? 60 : c.alive;
       if (c.type === UNIT_TANK) b.orderMove(c.id, x, b.terrain.frontY(enemy, x) + fwd * 40);
       else b.orderStorm(c.id, x, b.terrain.frontY(enemy, x));
       n += c.alive;
@@ -701,6 +714,41 @@ export class BattleAI {
     this.generalUntil = b.time + 240;
     this.report(`Generalangriff! ${n} Mann stürmen auf allen Flanken`, "info", WORLD_W / 2, this.front(b, WORLD_W / 2));
     this.onLog?.(`Generalangriff mit ${n} Mann`);
+    return true;
+  }
+
+  /** Voller Rückzug bis zu diesem Zeitpunkt: keine neuen Angriffe */
+  retreatUntil = -1;
+
+  /**
+   * Voller Rückzug: bricht Generalangriff und Angriffe ab und holt alle Kompanien in die eigene
+   * Stellung zurück – auch aus eroberten feindlichen Gräben. Zwei Minuten lang greift der Stab
+   * nicht von sich aus an.
+   */
+  fullRetreat(b: Battle): boolean {
+    if (b.result) return false;
+    if (this.attack) this.endAttack(b);
+    this.generalUntil = -1;
+    this.held = null;
+    const fwd = FORWARD[this.side];
+    let n = 0;
+    for (const c of b.companies) {
+      if (c.side !== this.side || c.alive <= 0 || c.type === UNIT_GUN || c.type === UNIT_MAGE) continue;
+      // Heimat vor der eigenen Front (eroberter Graben, Niemandsland) → neuer Platz im eigenen Graben
+      if ((c.homeY - this.front(b, c.homeX)) * fwd > 40) {
+        const slot = b.freeSlot(this.side, true, laneOf(c.cx));
+        c.homeX = slot.x;
+        c.homeY = slot.y;
+      }
+      if (Math.hypot(c.cx - c.homeX, c.cy - c.homeY) > 40) {
+        c.manual = false;
+        b.orderRetreat(c.id);
+        n += c.alive;
+      }
+    }
+    this.retreatUntil = b.time + 120;
+    this.attackWait = Math.max(this.attackWait, 120);
+    this.report(`Rückzug! ${n} Mann zurück in die eigene Stellung`, "info", WORLD_W / 2, this.front(b, WORLD_W / 2));
     return true;
   }
 
