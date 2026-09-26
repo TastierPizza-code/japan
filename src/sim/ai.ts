@@ -153,12 +153,41 @@ export class BattleAI {
       const threatened = ours && o.capturer >= 0;
       const lost = !ours && Math.abs(o.y - this.front(b, o.x)) < 40;
       if (!threatened && !lost) continue;
+      // Nur nachschicken, solange dort zu wenige eigene Leute gegen die Angreifer stehen
+      const ownThere = b.countNear(this.side, o.x, o.y, 150);
+      const foeThere = b.countNear(1 - this.side, o.x, o.y, 150);
+      if (ownThere > foeThere * 1.5 + 20) continue;
       const helper = own
-        .filter((c) => (c.type === UNIT_RIFLE || c.type === UNIT_FLAME || c.type === UNIT_STORM) && c.order === "advance" && c.morale > 55 && !busy.has(c.id))
+        .filter(
+          (c) =>
+            (c.type === UNIT_RIFLE || c.type === UNIT_FLAME || c.type === UNIT_STORM) &&
+            c.order === "advance" &&
+            c.morale > 55 &&
+            !busy.has(c.id) &&
+            dist(c, o) > 120,
+        )
         .sort((a, c) => dist(a, o) - dist(c, o))[0];
       if (helper && dist(helper, o) < 600) {
         b.orderStorm(helper.id, o.x, o.y);
         busy.add(helper.id);
+      }
+    }
+    // Nach dem Gegenstoß: wer ohne Feind in der Nähe irgendwo herumsteht, geht zurück in seinen Grabenabschnitt
+    // (sonst drängen sich ganze Kompanien im Freien – ein Fest für die Artillerie). Wer einen feindlichen
+    // Graben erobert hat, bleibt und richtet ihn ein.
+    if (this.generalUntil <= b.time) {
+      for (const c of own) {
+        if (busy.has(c.id) || c.order !== "advance") continue;
+        if (c.type !== UNIT_RIFLE && c.type !== UNIT_FLAME && c.type !== UNIT_STORM) continue;
+        if (Math.hypot(c.cx - c.homeX, c.cy - c.homeY) < 90) continue;
+        if (Math.hypot(c.tx - c.homeX, c.ty - c.homeY) < 10) continue; // schon auf dem Rückweg
+        if (b.countNear(1 - this.side, c.cx, c.cy, 180) > 5) continue;
+        if (Math.abs(c.cy - b.terrain.frontY(1 - this.side, c.cx)) < 50) {
+          c.homeX = c.cx;
+          c.homeY = c.cy;
+          continue;
+        }
+        b.orderMove(c.id, c.homeX, c.homeY);
       }
     }
     // „Halten“: alles, was im Niemandsland liegt, zurück in den Graben – ein eroberter feindlicher Graben wird gehalten
@@ -173,6 +202,7 @@ export class BattleAI {
         c.homeY = y;
       }
     }
+    this.balanceLanes(b, own, busy);
     // Leere Frontabschnitte wieder besetzen
     for (const lane of LANES) {
       const fy = this.front(b, lane);
@@ -196,12 +226,40 @@ export class BattleAI {
         )
         .sort((a, c) => Math.abs(a.cx - lane) - Math.abs(c.cx - lane))[0];
       if (spare) {
-        b.orderMove(spare.id, lane, fy);
-        spare.homeX = lane;
-        spare.homeY = fy;
+        const slot = b.freeSlot(this.side, true, laneOf(lane));
+        b.orderMove(spare.id, slot.x, slot.y);
+        spare.homeX = slot.x;
+        spare.homeY = slot.y;
         busy.add(spare.id);
       }
     }
+  }
+
+  /**
+   * Flanken ausgleichen: ist ein Abschnitt deutlich schwächer besetzt als der stärkste,
+   * wird eine Kompanie verlegt – aber nicht aus einem Abschnitt, der gerade angegriffen wird.
+   */
+  private balanceLanes(b: Battle, own: Company[], busy: Set<number>) {
+    if (this.generalUntil > b.time) return;
+    const fwd = FORWARD[this.side];
+    const nearFront = (c: Company) => Math.abs(c.cy - this.front(b, c.cx)) < 120 || (c.cy - this.front(b, c.cx)) * fwd < 0;
+    const inLane = (c: Company, l: number) => laneOf(c.cx) === l;
+    const rifles = own.filter((c) => (c.type === UNIT_RIFLE || c.type === UNIT_STORM) && c.alive > 20 && nearFront(c));
+    const men = [0, 1, 2].map((l) => rifles.filter((c) => inLane(c, l)).reduce((n, c) => n + c.alive, 0));
+    const weak = men.indexOf(Math.min(...men));
+    const strong = men.indexOf(Math.max(...men));
+    if (weak === strong || men[weak] > men[strong] * 0.45) return;
+    const underAttack = b.companies.some((c) => c.side !== this.side && c.order === "storm" && c.alive > 30 && laneOf(c.cx) === strong);
+    if (underAttack) return;
+    const mover = rifles
+      .filter((c) => inLane(c, strong) && c.order === "advance" && !busy.has(c.id))
+      .sort((p, q) => Math.abs(p.cx - LANES[weak]) - Math.abs(q.cx - LANES[weak]))[0];
+    if (!mover) return;
+    const { x, y } = b.freeSlot(this.side, true, weak);
+    b.orderMove(mover.id, x, y);
+    mover.homeX = x;
+    mover.homeY = y;
+    busy.add(mover.id);
   }
 
   /** Tankgewehre dorthin, wo feindliche Panzer durchbrechen */

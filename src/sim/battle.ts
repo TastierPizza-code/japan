@@ -393,6 +393,36 @@ export class Battle {
   }
 
   /** Gute Plätze für MGs: Bunker der Seite, sonst an den Flankengrenzen */
+  /**
+   * Freier Platz für eine neue Kompanie: der am dünnsten besetzte Abschnitt der Front,
+   * im vorderen Graben, solange dort Platz ist, sonst im Unterstützungsgraben.
+   */
+  freeSlot(side: number, preferFront: boolean, lane = -1): { x: number; y: number } {
+    let best = { x: WORLD_W / 2, y: this.terrain.supportY(side, WORLD_W / 2) };
+    let bestN = Infinity;
+    for (const front of preferFront ? [true, false] : [false]) {
+      for (let x = 120; x <= WORLD_W - 120; x += 90) {
+        if (lane >= 0 && Math.min(2, Math.floor((x / WORLD_W) * 3)) !== lane) continue;
+        const y = front ? this.terrain.frontY(side, x) : this.terrain.supportY(side, x);
+        // zählt die zugewiesenen Plätze (auch von Kompanien, die noch anmarschieren)
+        let n = 0;
+        for (const c of this.companies) {
+          if (c.side !== side || c.alive <= 0 || c.type === UNIT_MAGE || c.type === UNIT_GUN) continue;
+          if (Math.abs(c.homeX - x) < 100 && Math.abs(c.homeY - y) < 60) n += c.alive;
+        }
+        // bei Gleichstand näher an der Abschnittsmitte (nicht immer am Kartenrand)
+        const laneMid = (Math.min(2, Math.floor((x / WORLD_W) * 3)) + 0.5) * (WORLD_W / 3);
+        const score = n + Math.abs(x - laneMid) * 0.05;
+        if (score < bestN) {
+          bestN = score;
+          best = { x, y };
+        }
+      }
+      if (front && bestN < 150) return best;
+    }
+    return best;
+  }
+
   /** Bereitstellung der Panzer: dicht hinter dem Unterstützungsgraben, damit sie rechtzeitig vorn sind */
   tankPark(side: number, x: number): number {
     const sy = this.terrain.supportY(side, x);

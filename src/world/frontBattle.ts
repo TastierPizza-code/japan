@@ -142,9 +142,8 @@ export class FrontBattle {
         };
         if (d.kind === "infantry") {
           while (spare >= 30 && rifles < FIELD_RIFLE_COMPANIES) {
-            const slot = b.companies.filter((c) => c.side === bs && c.type === UNIT_RIFLE).length;
-            const x = LANES[slot % 3] + (slot >= 6 ? 140 : slot >= 3 ? -70 : 0);
-            const y = initial && slot < 3 ? t.frontY(bs, x) : t.supportY(bs, x);
+            // Dort hin, wo die Front am dünnsten besetzt ist – nicht alle auf dieselben drei Punkte
+            const { x, y } = b.freeSlot(bs, true);
             spawn(UNIT_RIFLE, `${num}.${++k}`, x, y, Math.min(COMPANY_SIZE, spare));
             rifles++;
           }
