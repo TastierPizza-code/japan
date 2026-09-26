@@ -1292,10 +1292,20 @@ export class Battle {
     this.by(-1, C_FIRE);
     for (const f of this.fires) {
       for (let s = 0; s < 2; s++) {
-        this.grids[s].forEachInRadius(f.x, f.y, f.r, this.x, this.y, (id) => {
-          if (!this.alive[id] || STATS[this.type[id]].armored) return;
-          this.pin(id, 1);
-          if (this.rng.next() < 0.5 * dt) this.damage(id, 1, 0);
+        this.grids[s].forEachInRadius(f.x, f.y, f.r, this.x, this.y, (id, d) => {
+          if (!this.alive[id] || STATS[this.type[id]].armored || this.type[id] === UNIT_GUN) return;
+          // Wer Feuer spürt, springt heraus – liegen bleibt niemand darin
+          const dx = this.x[id] - f.x;
+          const dy = this.y[id] - f.y;
+          const len = d || 1;
+          this.x[id] += (dx / len) * 9 * dt;
+          this.y[id] += (dy / len) * 9 * dt;
+          // Platz im Brand aufgeben und daneben neu Stellung suchen
+          if (Math.hypot(this.tx[id] - f.x, this.ty[id] - f.y) < f.r + 3 && this.type[id] !== UNIT_MAGE) {
+            this.place(id, f.x + (dx / len) * (f.r + 8), f.y + (dy / len) * (f.r + 8), 10);
+          }
+          this.pinned[id] = 0;
+          if (this.rng.next() < 0.35 * dt) this.damage(id, 1, 0);
         });
       }
     }
