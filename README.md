@@ -43,8 +43,13 @@ dem Handy wie am PC. Das Spielkonzept steht in [KONZEPT.md](KONZEPT.md).
   Gefallene, Explosionen mit Druckwelle und Trümmern, Rauch, Kamerawackeln, synthetischer Ton.
 - Drei Darstellungen zum Umschalten (Taste V): Klassisch, Deutlich (Farbmarker für kleine Bildschirme),
   Punkte (Übersicht).
-- **Du führst die Magier**, alles andere führen deine Offiziere. Du gibst ihnen Haltungen je
-  Flanke, befiehlst Angriffe oder den **Generalangriff** (G) und steuerst die Artillerie.
+- **Du führst die Magier**, alles andere führen deine Offiziere.
+  - Magier-Befehle: Luftschutz, Begleiten, Jagd, oder du führst sie direkt.
+  - Fähigkeiten: **Sprengzauber** (Z) und **Schutzkuppel** (X).
+  - Den Offizieren gibst du Haltungen je Flanke, befiehlst Angriffe oder den **Generalangriff** (G)
+    und steuerst die Artillerie.
+- **Artillerie** reicht nur bis knapp hinter den feindlichen vorderen Graben. Im Graben hält sie
+  vor allem nieder, tödlich ist sie für Truppen im Freien.
 - **Überlegenheit gewinnt**: Wer örtlich klar überlegen ist, behält beim Sturm die Nerven. Wer
   unterlegen im Graben sitzt, bricht. Laufende Stürmer sind schwerer zu treffen. Im Test bricht
   ein Generalangriff mit 1,5-facher Stärke den Gegner in wenigen Minuten. Bei Gleichstand ist er
