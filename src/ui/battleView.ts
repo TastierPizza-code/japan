@@ -172,7 +172,8 @@ export class BattleView {
     ctx.drawImage(this.blood.canvas, 0, 0, this.blood.canvas.width / BloodLayer.SCALE, this.blood.canvas.height / BloodLayer.SCALE);
     this.gl.selected = this.selected;
     this.gl.render(b, this.cam, this.dpr, simDt);
-    this.overlay.update(b, this.cam, this.selected);
+    const plan = off && !this.ctx.spectator ? off.attackPlan() : null;
+    this.overlay.update(b, this.cam, this.selected, plan ? { ...plan, label: off!.attackStatus() ?? "" } : null);
     this.cam.x -= sx;
     this.cam.y -= sy;
     this.updateScale();

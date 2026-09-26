@@ -550,6 +550,12 @@ export class BattleAI {
     return this.startAttack(b, own, lane, true);
   }
 
+  /** Laufender Angriff für die Karte: Abschnitt, Einbruchstelle, Phase */
+  attackPlan(): { lane: number; breach: number; stage: string } | null {
+    const a = this.attack;
+    return a ? { lane: a.lane, breach: a.breach, stage: a.stage } : null;
+  }
+
   /** Kurzbeschreibung des laufenden Angriffs für die Anzeige */
   attackStatus(): string | null {
     const a = this.attack;

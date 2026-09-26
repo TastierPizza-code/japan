@@ -19,9 +19,26 @@ export class Overlay {
     this.onSelect = onSelect;
   }
 
-  update(b: Battle, cam: Camera, selected: number) {
+  update(b: Battle, cam: Camera, selected: number, plan: { lane: number; breach: number; stage: string; label: string } | null = null) {
     const z = cam.zoom;
     const parts: string[] = [];
+
+    // Eigener Angriffsplan: Pfeil von der eigenen Stellung zur Einbruchstelle
+    if (plan) {
+      const x0 = plan.stage === "prep" || plan.stage === "approach" ? plan.lane : plan.breach;
+      const a = cam.toScreen(x0, b.terrain.frontY(PLAYER, x0));
+      const t = cam.toScreen(plan.breach, b.terrain.frontY(1 - PLAYER, plan.breach));
+      const ang = Math.atan2(t.y - a.y, t.x - a.x);
+      const hx = t.x - Math.cos(ang) * 18;
+      const hy = t.y - Math.sin(ang) * 18;
+      const wing = (d: number) => `${hx + Math.cos(ang + d) * 14},${hy + Math.sin(ang + d) * 14}`;
+      const live = plan.stage === "storm";
+      parts.push(
+        `<path d="M${a.x} ${a.y}L${hx} ${hy}" stroke="${PC}" stroke-width="${live ? 4 : 3}" stroke-dasharray="${live ? "none" : "10 8"}" opacity=".75"/>`,
+        `<path d="M${t.x} ${t.y}L${wing(2.6)}L${wing(-2.6)}Z" fill="${PC}" opacity=".85"/>`,
+        `<text x="${hx - Math.cos(ang) * 30 + 12}" y="${hy - Math.sin(ang) * 30}" font-size="13" font-weight="bold" fill="${PC}" stroke="#000" stroke-width="3" paint-order="stroke">${plan.label}</text>`,
+      );
+    }
 
     for (const o of b.objectives) {
       const p = cam.toScreen(o.x, o.y);
