@@ -69,7 +69,7 @@ import {
 } from "./config.ts";
 import { SpatialGrid } from "./grid.ts";
 import { Rng } from "./rng.ts";
-import { K_WALL, K_WRECK, Terrain, type Biome } from "./terrain.ts";
+import { K_BUNKER, K_TRENCH, K_WALL, K_WRECK, Terrain, type Biome } from "./terrain.ts";
 
 export type Order = "advance" | "storm" | "retreat" | "rout";
 
@@ -85,6 +85,8 @@ export interface Company {
   homeX: number;
   homeY: number;
   morale: number;
+  /** mittlere Deckung der Männer (0 = freies Feld, 1 = volle Deckung) */
+  cover: number;
   initial: number;
   alive: number;
   cx: number;
@@ -338,7 +340,8 @@ export class Battle {
       this.createCompany(s, UNIT_STORM, s === 0 ? "Stoßtrupp" : "Corps franc", WORLD_W / 2 + 150, t.supportY(s, WORLD_W / 2 + 150), STORM_PER_SQUAD);
       const tankY = (t.supportY(s, WORLD_W / 2) + GUN_Y[s]) / 2;
       this.createCompany(s, UNIT_TANK, s === 0 ? "Panzerzug" : "Chars d'assaut", WORLD_W / 2, tankY, TANKS_PER_PLATOON);
-      this.createCompany(s, UNIT_GUN, s === 0 ? "1. Batterie" : "1re Batterie", WORLD_W / 2, GUN_Y[s], GUNS_PER_BATTERY);
+      this.createCompany(s, UNIT_GUN, s === 0 ? "1. Batterie" : "1re Batterie", WORLD_W / 2 - 250, GUN_Y[s], GUNS_PER_BATTERY);
+      this.createCompany(s, UNIT_GUN, s === 0 ? "2. Batterie" : "2e Batterie", WORLD_W / 2 + 250, GUN_Y[s], GUNS_PER_BATTERY);
       this.createCompany(s, UNIT_MAGE, s === 0 ? "Magier „Sturmvogel“" : "Mages „Corbeau“", WORLD_W / 2 - 300, REAR_Y[s], MAGES_PER_SQUAD);
     }
     for (let s = 0; s < 2; s++) this.sides[s].initialStrength = this.groundStrength(s);
@@ -399,7 +402,7 @@ export class Battle {
     let last = 0;
     const guns = battery.members.filter((g) => this.alive[g]);
     guns.forEach((g, gi) => {
-      const shots = kind === "smoke" ? 2 : ARTY_SHELLS_PER_GUN;
+      const shots = kind === "smoke" ? 3 : ARTY_SHELLS_PER_GUN;
       for (let k = 0; k < shots; k++) {
         const at = this.time + 0.5 + gi * 0.35 + k * ARTY_SHELL_INTERVAL + this.rng.next() * 0.4;
         this.pending.push({ gun: g, at, x, y, kind });
@@ -697,13 +700,17 @@ export class Battle {
     const rng = this.rng;
     const st = STATS[this.type[i]];
     const tType = this.type[t];
-    const sight = this.sight(i, t);
+    const sight = this.alongTrench(i, t) ? 0.05 : this.sight(i, t);
     let p = baseHit * (1 - 0.75 * (dist / st.range)) * (1 - 0.6 * this.suppress[i]) * sight;
     if (tType === UNIT_MAGE) p *= MAGE_EVASION * (this.type[i] === UNIT_MG ? 1.6 : 1);
     else {
       let cover = this.terrain.coverAt(this.x[t], this.y[t]);
-      // Längs des Grabens geschossen: Brustwehr und Trichterrand schützen nur nach vorn
-      if (cover > 0 && Math.abs(this.x[t] - this.x[i]) > 2 * Math.abs(this.y[t] - this.y[i])) cover *= ENFILADE_COVER;
+      // Von der Seite geschossen: Trichterrand, Ruine oder Wrack schützen nur nach vorn.
+      // Gräben nicht – ihre Traversen (Zickzack) verhindern Längsfeuer; dort hilft nur die Handgranate.
+      if (cover > 0 && Math.abs(this.x[t] - this.x[i]) > 2 * Math.abs(this.y[t] - this.y[i])) {
+        const k = this.terrain.kindAt(this.x[t], this.y[t]);
+        if (k !== K_TRENCH && k !== K_BUNKER) cover *= ENFILADE_COVER;
+      }
       p *= 1 - cover;
     }
     // Blind ins Nebelfeld geschossen hält kaum nieder
@@ -754,7 +761,10 @@ export class Battle {
       const tk = nearestOf(this.unitsOf(enemy, UNIT_TANK), STATS[UNIT_AT].range);
       if (tk >= 0) return tk;
     }
-    const ground = this.grids[enemy].nearest(x, y, range, this.x, this.y);
+    // Wer im Graben liegt, sieht nicht längs durch den Graben (Traversen)
+    const k = this.terrain.kindAt(x, y);
+    const inTrench = k === K_TRENCH || k === K_BUNKER;
+    const ground = this.grids[enemy].nearest(x, y, range, this.x, this.y, inTrench ? (id) => !this.alongTrench(i, id) : undefined);
     // Flugabwehr gab es kaum: Magier werden nur beschossen, wenn sie nah sind
     if (type === UNIT_RIFLE || type === UNIT_MG) {
       const m = nearestOf(this.unitsOf(enemy, UNIT_MAGE), Math.min(range, 200));
@@ -913,6 +923,28 @@ export class Battle {
     this.suppress[id] = Math.min(1, this.suppress[id] + amount * nerve);
   }
 
+  /** Wie viele Soldaten (ohne Magier) einer Seite stehen im Umkreis? */
+  countNear(side: number, x: number, y: number, r: number): number {
+    let n = 0;
+    this.grids[side].forEachInRadius(x, y, r, this.x, this.y, (id) => {
+      if (this.alive[id] && this.type[id] !== UNIT_MAGE) n++;
+    });
+    return n;
+  }
+
+  /**
+   * Längs durch denselben Graben kann man nicht weit sehen: Traversen (Zickzack) versperren
+   * nach wenigen Metern die Sicht. Gilt für beide im Graben, wenn die Linie überwiegend seitlich läuft.
+   */
+  alongTrench(i: number, t: number): boolean {
+    const dx = Math.abs(this.x[t] - this.x[i]);
+    if (dx < 40 || Math.abs(this.y[t] - this.y[i]) * 2 > dx) return false;
+    const ki = this.terrain.kindAt(this.x[i], this.y[i]);
+    if (ki !== K_TRENCH && ki !== K_BUNKER) return false;
+    const kt = this.terrain.kindAt(this.x[t], this.y[t]);
+    return kt === K_TRENCH || kt === K_BUNKER;
+  }
+
   /** Sicht zwischen zwei Einheiten: 1 = frei, bis 1 - SMOKE_BLOCK mitten durch dichten Nebel */
   sight(i: number, t: number): number {
     if (this.smokes.length === 0) return 1;
@@ -1013,10 +1045,12 @@ export class Battle {
       let sy = 0;
       let n = 0;
       let arrived = 0;
+      let cover = 0;
       for (const id of c.members) {
         if (!this.alive[id]) continue;
         sx += this.x[id];
         sy += this.y[id];
+        cover += this.terrain.coverAt(this.x[id], this.y[id]);
         n++;
         if (!this.moving[id]) arrived++;
       }
@@ -1024,6 +1058,7 @@ export class Battle {
       if (n === 0) continue;
       c.cx = sx / n;
       c.cy = sy / n;
+      c.cover = cover / n;
 
       if (c.type === UNIT_MAGE) {
         const atHome = Math.hypot(c.cx - c.homeX, c.cy - c.homeY) < 60;
@@ -1040,12 +1075,22 @@ export class Battle {
         c.morale = Math.min(100, c.morale + 2 * dt);
         const home = Math.hypot(c.cx - c.homeX, c.cy - c.homeY) < 60;
         if (home && c.morale >= MORALE_RALLY) this.setTarget(c, c.homeX, c.homeY, "advance");
-      } else if (c.morale < (c.order === "storm" ? MORALE_ROUT_STORM : MORALE_ROUT) * (c.type === UNIT_STORM ? 0.6 : 1)) {
+      } else if (
+        // Wer in guter Deckung liegt (Graben, Bunker), hält länger aus als im freien Feld
+        c.morale <
+        (c.order === "storm" ? MORALE_ROUT_STORM : MORALE_ROUT) * (c.type === UNIT_STORM ? 0.6 : 1) * (1 - 0.5 * c.cover)
+      ) {
         this.setTarget(c, c.homeX, c.homeY, "rout");
       } else if (c.order === "storm" && arrived >= n * 0.8) {
-        // Angekommen: im eroberten Abschnitt Stellung beziehen
+        // Angekommen: im eroberten Abschnitt Stellung beziehen – wer nahe am feindlichen Graben ist, springt hinein
         c.order = "advance";
-        for (const id of c.members) if (this.alive[id]) this.place(id, this.x[id], this.y[id], 16);
+        const enemy = 1 - c.side;
+        for (const id of c.members) {
+          if (!this.alive[id]) continue;
+          const ty = this.terrain.frontY(enemy, this.x[id]);
+          if (Math.abs(this.y[id] - ty) < 70) this.place(id, this.x[id], ty, 22);
+          else this.place(id, this.x[id], this.y[id], 18);
+        }
       } else if (c.order === "retreat" && arrived >= n * 0.8) {
         c.order = "advance";
       }
@@ -1281,6 +1326,7 @@ export class Battle {
       homeX: x,
       homeY: y,
       morale: 100,
+      cover: 0,
       initial: size,
       alive: size,
       cx: x,

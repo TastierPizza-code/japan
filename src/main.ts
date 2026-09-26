@@ -150,10 +150,11 @@ class App {
   startSkirmish(biome?: Biome) {
     $("#dialog").hidden = true;
     const battle = new Battle((Math.random() * 1e9) | 0, { biome, big: this.skBig });
-    const ais = [new BattleAI(ENEMY, "balanced", this.skVeteran)];
-    if (this.skWatch) ais.push(new BattleAI(PLAYER));
+    // Eigene Offiziere: verteidigen von sich aus; Angriffe befiehlt der Spieler (Haltung oder „Angriff planen“)
+    const officer = new BattleAI(PLAYER, this.skWatch ? "balanced" : "defensive");
+    const ais = [new BattleAI(ENEMY, "balanced", this.skVeteran), officer];
     this.skirmish = { battle, ais, shown: false };
-    this.battleView.open({ battle, spectator: this.skWatch });
+    this.battleView.open({ battle, spectator: this.skWatch, officer });
     this.view = "battle";
     this.toast(this.battleView.biomeName(), "info");
     this.setSpeed(1);
@@ -165,7 +166,10 @@ class App {
     if (!p?.battle) return;
     this.campaign!.hide();
     w.viewedPoint = pointId;
-    this.battleView.open({ battle: p.battle.battle, world: w, pointId, spectator: w.sideAt(p, w.player) < 0 });
+    const ps = w.sideAt(p, w.player);
+    // Befehle an die Offiziere nur in eigenen Schlachten, nicht bei Verbündeten
+    const principal = ps >= 0 && (ps === 0 ? p.a : p.b) === w.player;
+    this.battleView.open({ battle: p.battle.battle, world: w, pointId, spectator: ps < 0, officer: principal ? p.battle.ai[0] : undefined });
     this.view = "battle";
     $("#back").hidden = false;
   }

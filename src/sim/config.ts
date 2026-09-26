@@ -211,7 +211,7 @@ export const MINE_RADIUS = 8;
 export const MINE_TANK_DAMAGE = 20;
 
 // Nebel: Schüsse durch Rauch treffen kaum
-export const SMOKE_RADIUS = 50;
+export const SMOKE_RADIUS = 60;
 /** Flankenfeuer: Wer von der Seite (längs des Grabens) beschossen wird, hat nur diesen Anteil seiner Deckung */
 export const ENFILADE_COVER = 0.45;
 export const SMOKE_DURATION = 80;

@@ -2,6 +2,7 @@ import type { Battle, Company } from "./battle.ts";
 import { FORWARD, UNIT_AT, UNIT_FLAME, UNIT_GUN, UNIT_MAGE, UNIT_MG, UNIT_RIFLE, UNIT_STORM, UNIT_TANK, WIRE_OFFSET, WORLD_W } from "./config.ts";
 
 const LANES = [WORLD_W / 6, WORLD_W / 2, (WORLD_W * 5) / 6];
+const LANE_NAMES = ["links", "Mitte", "rechts"];
 
 /** Haltung eines KI-Offiziers für eine Flanke. */
 export type Stance = "hold" | "defensive" | "balanced" | "aggressive";
@@ -16,6 +17,13 @@ interface Attack {
   stage: "prep" | "approach" | "smoke" | "storm";
   timer: number;
   units: number[];
+  /** vom Spieler befohlen */
+  planned: boolean;
+  /** Begleit-MGs sind in den Einbruch nachgezogen */
+  mgsForward?: boolean;
+  /** Kompanie der zweiten Welle und ob sie schon stürmt */
+  wave?: number;
+  waveSent?: boolean;
 }
 
 export function laneOf(x: number) {
@@ -40,6 +48,8 @@ export class BattleAI {
   private attackStart = 0;
   /** Erfahrene Offiziere nutzen Drahtschneiden, Nebel und Stoßtrupps; unerfahrene stürmen einfach los */
   veteran: boolean;
+  /** Gehaltener Einbruch: dorthin geht Sperrfeuer gegen Gegenstöße */
+  private held: { x: number; y: number; until: number } | null = null;
 
   constructor(side: number, stance: Stance = "balanced", veteran = true) {
     this.side = side;
@@ -96,11 +106,12 @@ export class BattleAI {
         busy.add(helper.id);
       }
     }
-    // „Halten“: alles, was vor dem eigenen Draht steht, zurück in den Graben
+    // „Halten“: alles, was im Niemandsland liegt, zurück in den Graben – ein eroberter feindlicher Graben wird gehalten
     for (const c of own) {
       if (busy.has(c.id) || c.type === UNIT_MAGE || c.type === UNIT_GUN || c.order !== "advance") continue;
       if (this.stances[laneOf(c.cx)] !== "hold") continue;
-      if ((c.cy - b.terrain.wireY(this.side, c.cx)) * FORWARD[this.side] > 20) {
+      const inEnemyTrench = Math.abs(c.cy - b.terrain.frontY(1 - this.side, c.cx)) < 50;
+      if (!inEnemyTrench && (c.cy - b.terrain.wireY(this.side, c.cx)) * FORWARD[this.side] > 20) {
         const y = this.front(b, c.cx);
         b.orderMove(c.id, c.cx, y);
         c.homeX = c.cx;
@@ -179,32 +190,16 @@ export class BattleAI {
         this.attackWait = 30;
         return;
       }
-      const lane = LANES[best];
-      const reach = this.veteran ? 480 : 300;
-      const candidates = own
-        .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 60 && Math.abs(c.cx - lane) < reach)
-        .sort((a, c) => c.alive - a.alive);
-      // Schwerpunkt bilden: erfahrene Offiziere werfen mehr Kompanien in den Angriff, ein Teil hält immer den Graben
-      const share = 0.5;
-      const infantry = candidates.slice(0, Math.max(2, Math.floor(candidates.length * share)));
-      if (infantry.length === 0) {
+      if (!this.startAttack(own, LANES[best], false)) {
         this.attackWait = 30;
         return;
       }
-      const support = own.filter(
-        (c) =>
-          (c.type === UNIT_TANK || c.type === UNIT_FLAME || c.type === UNIT_STORM) &&
-          c.order === "advance" &&
-          Math.abs(c.cx - lane) < 600,
-      );
-      this.attack = { lane, breach: lane, stage: "prep", timer: 0, units: [...infantry, ...support].map((c) => c.id) };
-      this.attackStart = [...infantry, ...support].reduce((n, c) => n + c.alive, 0);
-      this.onLog?.(`Angriff Flanke ${best} mit ${this.attackStart} Mann`);
     }
 
     const a = this.attack;
-    // Haltung wurde inzwischen geändert → Angriff abbrechen
-    if (AGGRESSION[this.stances[laneOf(a.lane)]] === 0) {
+    if (!a) return;
+    // Haltung wurde inzwischen geändert → Angriff abbrechen (befohlene Angriffe laufen weiter)
+    if (!a.planned && AGGRESSION[this.stances[laneOf(a.lane)]] === 0) {
       a.units.forEach((id) => {
         const c = b.companies[id];
         if (c.alive > 0 && !c.manual) b.orderRetreat(id);
@@ -235,7 +230,8 @@ export class BattleAI {
     // Ausgangsstellung außerhalb der Gewehrreichweite (nur MGs reichen so weit)
     const jumpY = (x: number) => enemyFront(x) - fwd * 360;
     const spread = (k: number, n: number, w: number, around: number) => around + (k - (n - 1) / 2) * w;
-    const foot = units.filter((c) => c.type !== UNIT_TANK);
+    const foot = units.filter((c) => c.type !== UNIT_TANK && c.type !== UNIT_MG);
+    const mgs = units.filter((c) => c.type === UNIT_MG);
     const tanks = units.filter((c) => c.type === UNIT_TANK);
     const arty = () => b.sides[this.side].artyCharges > 0;
 
@@ -246,14 +242,29 @@ export class BattleAI {
         this.artyWait = 30;
       }
       // 2. Vorarbeiten in Deckung (von Trichter zu Trichter), Panzer vorneweg
-      foot.forEach((c, k) => {
-        const x = spread(k, foot.length, 170, a.lane);
+      // Stoßtrupps und Flammenwerfer in die Mitte (sie führen den Einbruch), Schützen daneben
+      const lead = foot.filter((c) => c.type === UNIT_STORM || c.type === UNIT_FLAME);
+      const line = foot.filter((c) => c.type === UNIT_RIFLE);
+      lead.forEach((c, k) => {
+        const x = spread(k, lead.length, 50, a.lane);
+        b.orderMove(c.id, x, jumpY(x) - fwd * 30);
+      });
+      line.forEach((c, k) => {
+        const x = spread(k, line.length, 150, a.lane);
         b.orderMove(c.id, x, jumpY(x));
       });
       tanks.forEach((c, k) => b.orderMove(c.id, spread(k, tanks.length, 120, a.lane), jumpY(a.lane) + fwd * 70));
+      // Begleit-MGs an die Flanken der Ausgangsstellung: halten die Nachbarabschnitte nieder
+      mgs.forEach((c, k) => {
+        const x = a.lane + (k % 2 === 0 ? -1 : 1) * 240;
+        b.orderMove(c.id, x, enemyFront(x) - fwd * 330);
+      });
+      if (this.veteran) this.prepareWave(b, a, (x) => jumpY(x) - fwd * 140);
       a.stage = "approach";
       a.timer = 0;
     } else if (a.stage === "approach") {
+      // Vorbereitungsfeuer auf den Einbruchsabschnitt – eine Batterie bleibt für den Nebel frei
+      if (this.veteran && b.sides[this.side].artyCharges >= 2) b.callArtillery(this.side, a.lane, enemyFront(a.lane), "he");
       // Wer in der Ausgangsstellung wartet, liegt unter Feuer: nicht auf die letzten Nachzügler warten
       const rifles = foot.filter((c) => c.type === UNIT_RIFLE);
       const there = rifles.filter((c) => Math.abs(c.cy - jumpY(c.cx)) < 80).length;
@@ -292,11 +303,39 @@ export class BattleAI {
       }
     } else if (a.stage === "storm") {
       // Feuerwalze: solange die eigenen Leute noch weit genug weg sind, weiter auf den Graben schießen
+      const brokeIn = foot.some((c) => c.alive >= 8 && inTrench(c));
       if (this.veteran && arty()) {
         const lead = Math.min(...foot.map((c) => Math.abs(c.cy - enemyFront(c.cx))));
         if (lead > 170) b.callArtillery(this.side, a.breach, enemyFront(a.breach), "he");
+        else if (brokeIn) {
+          // Abriegelungsfeuer: hinter den genommenen Abschnitt, dorthin, wo der Gegenstoß herkommt
+          const y = b.terrain.supportY(enemySide, a.breach);
+          if (this.clearOfOwn(b, a.breach, y, 120)) b.callArtillery(this.side, a.breach, y, "he");
+        }
       }
-      if (a.timer > 120) {
+      // Zweite Welle: aus der Ausgangsstellung in den Einbruch
+      if (brokeIn && a.wave !== undefined && !a.waveSent) {
+        a.waveSent = true;
+        const w = b.companies[a.wave];
+        if (w.alive > 0 && w.order === "advance" && !w.manual) {
+          b.orderStorm(w.id, a.breach, enemyFront(a.breach));
+          this.onLog?.(`Zweite Welle stürmt: ${w.name}`);
+        }
+      }
+      if (this.veteran && brokeIn && !a.mgsForward) {
+        // Begleit-MGs sofort in den Einbruch nachziehen
+        a.mgsForward = true;
+        this.held = { x: a.breach, y: enemyFront(a.breach), until: b.time + 300 };
+        mgs.forEach((c, k) => {
+          const x = a.breach + (k === 0 ? -50 : 50);
+          const y = enemyFront(x);
+          b.orderMove(c.id, x, y);
+          c.homeX = x;
+          c.homeY = y;
+        });
+      }
+      if (a.timer > (brokeIn ? 150 : 120)) {
+        if (!a.mgsForward) for (const c of mgs) b.orderRetreat(c.id);
         if (this.veteran) this.consolidate(b, a, foot, inTrench);
         else
           // Unerfahrene graben sich ein, wo sie gerade liegen – oft mitten im Niemandsland
@@ -333,7 +372,91 @@ export class BattleAI {
     }
   }
 
-  /** Wo im Abschnitt ist der feindliche Draht am stärksten zerschossen? */
+  /**
+   * Zweite Welle bereitstellen: eine frische Kompanie aus der eigenen Stellung folgt der ersten
+   * mit Abstand, solange in jedem Abschnitt noch Besatzung bleibt.
+   */
+  private prepareWave(b: Battle, a: Attack, jumpY: (x: number) => number) {
+    const fwd = FORWARD[this.side];
+    const fresh = b.companies
+      .filter((c) => c.side === this.side && c.alive > 60 && c.type === UNIT_RIFLE && c.order === "advance" && !c.manual && !a.units.includes(c.id))
+      .filter((c) => (c.cy - this.front(b, c.cx)) * fwd <= 20)
+      .sort((p, q) => Math.abs(p.cx - a.breach) - Math.abs(q.cx - a.breach));
+    const manned = (skip: Company) =>
+      LANES.every((l) =>
+        b.companies.some((c) => c.side === this.side && c !== skip && c.alive > 0 && !a.units.includes(c.id) && (c.type === UNIT_RIFLE || c.type === UNIT_MG) && Math.abs(c.cx - l) < 300),
+      );
+    const wave = fresh.find((c) => manned(c));
+    if (!wave) return;
+    b.orderMove(wave.id, a.lane, jumpY(a.lane));
+    a.units.push(wave.id);
+    a.wave = wave.id;
+    this.onLog?.(`Zweite Welle rückt nach: ${wave.name}`);
+  }
+
+  /** Liegen keine eigenen Leute im Umkreis? (kein Beschuss der eigenen Truppe) */
+  private clearOfOwn(b: Battle, x: number, y: number, r: number) {
+    return !b.companies.some((c) => c.side === this.side && c.alive > 0 && c.type !== UNIT_MAGE && Math.hypot(c.cx - x, c.cy - y) < r);
+  }
+
+  /** Angriff zusammenstellen: Schützen aus dem Abschnitt, dazu Panzer, Flammenwerfer und Stoßtrupps */
+  private startAttack(own: Company[], lane: number, planned: boolean): boolean {
+    const reach = this.veteran ? 480 : 300;
+    const candidates = own
+      .filter((c) => c.type === UNIT_RIFLE && c.order === "advance" && c.morale > 60 && Math.abs(c.cx - lane) < reach)
+      .sort((a, c) => c.alive - a.alive);
+    // Schwerpunkt bilden, aber ein Teil hält immer den Graben (befohlene Angriffe setzen mehr ein)
+    const infantry = candidates.slice(0, Math.max(2, Math.floor(candidates.length * (planned ? 0.7 : 0.5))));
+    if (infantry.length === 0) return false;
+    const support = own.filter(
+      (c) => (c.type === UNIT_TANK || c.type === UNIT_FLAME || c.type === UNIT_STORM) && c.order === "advance" && Math.abs(c.cx - lane) < 600,
+    );
+    // Erfahrene nehmen bis zu zwei MGs als Begleitfeuer mit, mindestens eins bleibt im Graben
+    if (this.veteran) {
+      const mgs = own.filter((c) => c.type === UNIT_MG && c.order === "advance");
+      const take = mgs
+        .filter((c) => Math.abs(c.cx - lane) < 700)
+        .sort((p, q) => Math.abs(p.cx - lane) - Math.abs(q.cx - lane))
+        .slice(0, Math.min(2, mgs.length - 1));
+      support.push(...take);
+    }
+    this.attack = { lane, breach: lane, stage: "prep", timer: 0, units: [...infantry, ...support].map((c) => c.id), planned };
+    this.attackStart = [...infantry, ...support].reduce((n, c) => n + c.alive, 0);
+    this.onLog?.(`Angriff bei x=${Math.round(lane)} mit ${this.attackStart} Mann${planned ? " (befohlen)" : ""}`);
+    return true;
+  }
+
+  /**
+   * Vom Spieler befohlener Angriff auf einen Abschnitt: Der Offizier führt ihn mit allen
+   * Mitteln aus (Draht, Nebel, Feuerwalze, Stoßtrupps), auch wenn er selbst nicht angreifen würde.
+   */
+  planAttack(b: Battle, x: number): boolean {
+    if (this.attack || b.result) return false;
+    const lane = Math.max(150, Math.min(WORLD_W - 150, x));
+    const own = b.companies.filter((c) => c.side === this.side && c.alive > 0 && !c.manual);
+    return this.startAttack(own, lane, true);
+  }
+
+  /** Kurzbeschreibung des laufenden Angriffs für die Anzeige */
+  attackStatus(): string | null {
+    const a = this.attack;
+    if (!a) return null;
+    const where = LANE_NAMES[laneOf(a.lane)];
+    const what = { prep: "Draht wird zerschossen", approach: "Bereitstellung", smoke: "Nebel", storm: "Sturm" }[a.stage];
+    return `Angriff ${where}: ${what}`;
+  }
+
+  /** Laufenden Angriff abbrechen: alle zurück in die Ausgangsstellung */
+  cancelAttack(b: Battle) {
+    if (!this.attack) return;
+    for (const id of this.attack.units) {
+      const c = b.companies[id];
+      if (c.alive > 0 && !c.manual && c.type !== UNIT_TANK) b.orderRetreat(id);
+    }
+    this.endAttack(b);
+  }
+
+  /** Wo im Abschnitt ist der Draht am stärksten zerschossen und der Graben am dünnsten besetzt? */
   private findBreach(b: Battle, enemySide: number, lane: number): number {
     const fwd = FORWARD[enemySide];
     let best = lane;
@@ -342,7 +465,9 @@ export class BattleAI {
       const base = b.terrain.frontY(enemySide, x);
       let open = 0;
       for (const off of [WIRE_OFFSET - 12, WIRE_OFFSET, WIRE_OFFSET + 14]) open += b.terrain.slowAt(x, base + fwd * off);
-      const score = open - Math.abs(x - lane) / 400;
+      // Schwachstelle: wo der Graben dünn besetzt ist (von Beobachtern und Fliegern zu sehen)
+      const defenders = b.countNear(enemySide, x, base, 70);
+      const score = open - defenders / 40 - Math.abs(x - lane) / 400;
       if (score > bestScore) {
         bestScore = score;
         best = x;
@@ -381,6 +506,8 @@ export class BattleAI {
       }
       // Näher an uns = gefährlicher
       if ((c.cy - b.terrain.wireY(this.side, c.cx)) * FORWARD[this.side] < 300) score *= 1.5;
+      // Gegenstoß auf unseren Einbruch: Sperrfeuer
+      if (this.held && this.held.until > b.time && Math.hypot(c.cx - this.held.x, c.cy - this.held.y) < 320) score *= 2.5;
       if (own.some((o) => o.type !== UNIT_MAGE && dist(o, { x: c.cx, y: c.cy }) < 110)) continue; // kein Eigenbeschuss
       if (b.barrages.some((br) => Math.hypot(br.x - c.cx, br.y - c.cy) < 80)) continue;
       if (score > bestScore) {
@@ -395,7 +522,7 @@ export class BattleAI {
   }
 
   private mages(b: Battle, own: Company[], foe: Company[]) {
-    if (this.stances.every((s) => s === "hold")) return;
+    if (this.stances.every((s) => s === "hold") && !this.attack) return;
     if (this.veteran) {
       this.veteranMages(b, own, foe);
       return;
@@ -437,7 +564,28 @@ export class BattleAI {
       for (const m of all) if (m.mana >= 15) b.orderMove(m.id, intruder.cx, y);
       return;
     }
-    // 2. Eigene Ausfälle nur, solange die feindlichen Magier nicht eingreifen können
+    // 2. Luftschutz über dem eigenen Sturm oder frisch genommenen Einbruch
+    const a = this.attack;
+    const focus =
+      a && (a.stage === "storm" || a.stage === "smoke")
+        ? { x: a.breach, y: b.terrain.frontY(1 - this.side, a.breach) }
+        : this.held && this.held.until > b.time
+          ? this.held
+          : null;
+    if (focus) {
+      const near = (c: Company) => Math.hypot(c.cx - focus.x, c.cy - focus.y) < 350;
+      const threat =
+        foe.filter((c) => c.type === UNIT_MAGE && near(c)).sort((p, q) => q.alive - p.alive)[0] ??
+        foe.filter((c) => c.type !== UNIT_MAGE && c.type !== UNIT_GUN && near(c) && c.order === "storm").sort((p, q) => q.alive - p.alive)[0];
+      if (threat) {
+        const flyers = all.filter((m) => m.mana >= 20 && m.alive >= m.initial * 0.5);
+        if (flyers.length > 0) {
+          flyers.forEach((m, k) => b.orderMove(m.id, threat.cx + (k - (flyers.length - 1) / 2) * 30, threat.cy - fwd * 40));
+          return;
+        }
+      }
+    }
+    // 3. Eigene Ausfälle nur, solange die feindlichen Magier nicht eingreifen können
     //    (nachladen, zerschlagen oder klar unterlegen) – und nur mit allen vollen Staffeln gemeinsam
     const squads = all.filter((m) => m.alive >= m.initial * 0.5);
     const foeMages = foe.filter((c) => c.type === UNIT_MAGE);

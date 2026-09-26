@@ -1,4 +1,4 @@
-import type { Stance } from "../sim/ai.ts";
+import type { BattleAI, Stance } from "../sim/ai.ts";
 import type { Battle, Company } from "../sim/battle.ts";
 import { BLOOD_FADE, METERS_PER_UNIT, PLAYER, RESERVE_COOLDOWN, STATS, UNIT_GUN, UNIT_MAGE, UNIT_TANK } from "../sim/config.ts";
 import { BIOME_NAMES } from "../sim/terrain.ts";
@@ -10,7 +10,7 @@ import { STANCE_NAMES, type World } from "../world/world.ts";
 import { bindGestures, watchSize } from "./gestures.ts";
 import { Overlay, shortName } from "./overlay.ts";
 
-type Mode = "none" | "storm" | "arty" | "smoke";
+type Mode = "none" | "storm" | "arty" | "smoke" | "plan";
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -21,6 +21,8 @@ export interface BattleContext {
   pointId?: number;
   /** Der Spieler führt keine Seite (fremde Schlacht) */
   spectator: boolean;
+  /** Die KI-Offiziere des Spielers (führen alles, was der Spieler nicht selbst übernimmt) */
+  officer?: BattleAI;
 }
 
 const STANCE_ORDER: Stance[] = ["hold", "defensive", "balanced", "aggressive"];
@@ -61,6 +63,7 @@ export class BattleView {
     );
     $("#arty").addEventListener("click", () => this.setMode(this.mode === "arty" ? "none" : "arty"));
     $("#smokeBtn").addEventListener("click", () => this.setMode(this.mode === "smoke" ? "none" : "smoke"));
+    $("#planBtn").addEventListener("click", () => this.planButton());
     $("#modecancel").addEventListener("click", () => this.setMode("none"));
     $("#reserve").addEventListener("click", () => {
       this.ctx?.battle.callReserve(PLAYER);
@@ -98,7 +101,7 @@ export class BattleView {
     this.cam.fit();
     const campaign = !!ctx.world;
     $("#reserve").hidden = campaign;
-    $("#officerBtn").hidden = !campaign;
+    $("#officerBtn").hidden = !ctx.officer;
     $("#orders").hidden = ctx.spectator;
     $("#support").hidden = ctx.spectator;
     this.hud();
@@ -212,6 +215,12 @@ export class BattleView {
     if (!this.ctx || this.ctx.spectator) return;
     const w = this.cam.toWorld(sx, sy);
     const b = this.battle;
+    if (this.mode === "plan") {
+      if (this.ctx.officer?.planAttack(b, w.x)) this.setMode("none");
+      else $("#modetext").textContent = "Dort stehen keine freien Schützen für einen Angriff";
+      this.hud();
+      return;
+    }
     if (this.mode === "arty" || this.mode === "smoke") {
       if (b.callArtillery(PLAYER, w.x, w.y, this.mode === "smoke" ? "smoke" : "he")) this.setMode("none");
       this.hud();
@@ -265,6 +274,8 @@ export class BattleView {
     $("#modetext").textContent =
       m === "arty"
         ? "Artillerie: Zielgebiet antippen"
+        : m === "plan"
+          ? "Angriff: Abschnitt antippen – der Offizier zerschießt den Draht, legt Nebel und stürmt"
         : m === "smoke"
           ? "Nebel: auf den feindlichen Graben legen, dann stürmen (treibt mit dem Wind nach rechts)"
           : m === "storm"
@@ -272,6 +283,7 @@ export class BattleView {
             : "";
     $("#arty").classList.toggle("on", m === "arty");
     $("#smokeBtn").classList.toggle("on", m === "smoke");
+    $("#planBtn").classList.toggle("on", m === "plan");
     $('[data-order="storm"]').classList.toggle("on", m === "storm");
   }
 
@@ -284,6 +296,7 @@ export class BattleView {
     else if (k === "o") this.order("officer");
     else if (k === "a") this.setMode(this.mode === "arty" ? "none" : "arty");
     else if (k === "n") this.setMode(this.mode === "smoke" ? "none" : "smoke");
+    else if (k === "g") this.planButton();
     else if (k === "v") this.cycleStyle();
     else if (k === "escape" && (this.mode !== "none" || this.selected >= 0)) {
       if (this.mode !== "none") this.setMode("none");
@@ -299,10 +312,27 @@ export class BattleView {
     return p.battle.sideMap[0];
   }
 
+  /** Angriff planen – oder den laufenden abbrechen */
+  private planButton() {
+    const off = this.ctx?.officer;
+    if (!off || this.ctx?.spectator) return;
+    if (off.attackStatus()) {
+      off.cancelAttack(this.battle);
+      this.setMode("none");
+    } else this.setMode(this.mode === "plan" ? "none" : "plan");
+    this.hud();
+  }
+
   private cycleStance(lane: number) {
-    const { world, pointId } = this.ctx!;
+    const { world, pointId, officer } = this.ctx!;
     const p = world?.point(pointId!);
-    if (!p) return;
+    if (!p) {
+      if (!officer) return;
+      const cur = officer.stances[lane];
+      officer.stances[lane] = STANCE_ORDER[(STANCE_ORDER.indexOf(cur) + 1) % STANCE_ORDER.length];
+      this.hud();
+      return;
+    }
     const side = this.playerPointSide();
     const cur = p.stance[side][lane];
     const next = STANCE_ORDER[(STANCE_ORDER.indexOf(cur) + 1) % STANCE_ORDER.length];
@@ -352,10 +382,25 @@ export class BattleView {
         `<span style="color:var(--player)">${b.groundStrength(PLAYER)}</span>` +
         `<span class="objs">${objs}</span>` +
         `<span style="color:var(--enemy)">${b.groundStrength(1)}</span>`;
-      $("#flankRow").hidden = true;
+      const off = this.ctx.officer;
+      const flank = $("#flankRow");
+      flank.hidden = !off || this.ctx.spectator;
+      if (off && !this.ctx.spectator) {
+        flank.innerHTML = [0, 1, 2]
+          .map((l) => {
+            const s = off.stances[l];
+            return `<button data-lane="${l}" class="stance ${s}"><small>${LANE_NAMES[l]}</small>${STANCE_NAMES[s]}</button>`;
+          })
+          .join("");
+      }
     }
 
     const side = b.sides[PLAYER];
+    const plan = $<HTMLButtonElement>("#planBtn");
+    const status = this.ctx.officer?.attackStatus();
+    plan.hidden = !this.ctx.officer;
+    plan.textContent = status ? `${status} · ✕` : "Angriff planen";
+    plan.title = status ? "Angriff abbrechen (G): alle zurück in die Ausgangsstellung" : "Angriff planen (G)";
     const arty = $<HTMLButtonElement>("#arty");
     arty.textContent =
       side.artyMax === 0
@@ -422,7 +467,7 @@ export class BattleView {
           ? " · <b>flieht, sammelt sich hinten</b>"
           : c.manual
             ? " · <b>von dir geführt</b>"
-            : this.ctx?.world
+            : this.ctx?.officer
               ? " · Offizier führt"
               : " · Karte antippen = Position";
     const unit = c.type === UNIT_TANK ? "Panzer" : c.type === UNIT_GUN ? "Geschütze" : c.type === UNIT_MAGE ? "Magier" : "Mann";
